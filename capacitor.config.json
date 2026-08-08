@@ -1,0 +1,17 @@
+{
+  "appId": "com.earnaccessllc.milliontsp",
+  "appName": "MillionTSP",
+  "webDir": "dist",
+  "server": {
+    "url": "https://REPLACE-WITH-YOUR-PUBLISHED-APP-URL.base44.app",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "ios": {
+    "contentInset": "automatic"
+  },
+  "android": {
+    "backgroundColor": "#08080a"
+  },
+  "backgroundColor": "#08080a"
+}

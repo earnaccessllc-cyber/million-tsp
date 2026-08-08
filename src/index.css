@@ -1,0 +1,192 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Exo+2:wght@400;600;700;800;900&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-inter: 'Inter', system-ui, sans-serif;
+    --font-exo: 'Exo 2', system-ui, sans-serif;
+    --font-orbitron: 'Orbitron', monospace;
+    --font-rajdhani: 'Rajdhani', system-ui, sans-serif;
+    --font-mono-tech: 'Share Tech Mono', monospace;
+
+    /* Default (Black/Gold) theme */
+    --background: 60 100% 2%;
+    --foreground: 0 0% 95%;
+    --card: 240 20% 6%;
+    --card-foreground: 0 0% 95%;
+    --popover: 240 20% 6%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 43 80% 48%;
+    --primary-foreground: 240 20% 5%;
+    --secondary: 240 15% 11%;
+    --secondary-foreground: 0 0% 85%;
+    --muted: 240 15% 11%;
+    --muted-foreground: 0 0% 50%;
+    --accent: 43 80% 48%;
+    --accent-foreground: 240 20% 5%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 15% 14%;
+    --input: 240 15% 14%;
+    --ring: 43 80% 48%;
+    --chart-1: 43 80% 48%;
+    --chart-2: 43 96% 65%;
+    --chart-3: 217 91% 60%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 12 76% 61%;
+    --radius: 0.75rem;
+    --sidebar-background: 240 20% 4%;
+    --sidebar-foreground: 0 0% 85%;
+    --sidebar-primary: 43 80% 48%;
+    --sidebar-primary-foreground: 240 20% 5%;
+    --sidebar-accent: 240 15% 9%;
+    --sidebar-accent-foreground: 0 0% 85%;
+    --sidebar-border: 240 15% 14%;
+    --sidebar-ring: 43 80% 48%;
+
+    --gain: 142 71% 45%;
+    --loss: 0 72% 51%;
+
+    /* Gold brand tokens */
+    --gold: #C9A832;
+    --gold-bright: #FFD700;
+    --gold-dim: #8B6914;
+    --shield-body: #1e2240;
+  }
+
+  /* Light theme */
+  [data-theme="light"] {
+    --background: 0 0% 98%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
+    --primary: 43 80% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 0 0% 25%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 43 80% 40%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 43 80% 40%;
+    --gain: 142 71% 40%;
+    --loss: 0 72% 51%;
+  }
+
+  .dark {
+    --background: 60 100% 2%;
+    --foreground: 0 0% 95%;
+    --card: 240 20% 6%;
+    --card-foreground: 0 0% 95%;
+    --popover: 240 20% 6%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 43 80% 48%;
+    --primary-foreground: 240 20% 5%;
+    --secondary: 240 15% 11%;
+    --secondary-foreground: 0 0% 85%;
+    --muted: 240 15% 11%;
+    --muted-foreground: 0 0% 50%;
+    --accent: 43 80% 48%;
+    --accent-foreground: 240 20% 5%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 15% 14%;
+    --input: 240 15% 14%;
+    --ring: 43 80% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-inter;
+    background-color: #08080a;
+    font-size: 16px; /* Prevents iOS auto-zoom on inputs */
+  }
+}
+
+@layer utilities {
+  button, a[role="button"], nav a, nav button, [role="navigation"] {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  svg, [data-icon] {
+    user-select: none;
+    -webkit-user-select: none;
+    pointer-events: none;
+  }
+  /* Minimum tap target for primary buttons */
+  button, [role="button"] {
+    min-height: 44px;
+  }
+}
+
+/* Native bottom-sheet feel for Radix dialogs on mobile */
+@media (max-width: 640px) {
+  /* Dialog content slides up from bottom */
+  [role="dialog"][data-state="open"] > [data-radix-dialog-content],
+  [data-radix-dialog-content] {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    transform: none !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-top-left-radius: 1rem !important;
+    border-top-right-radius: 1rem !important;
+    max-height: 92dvh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  /* Sheet already slides from bottom — just ensure safe area */
+  [data-vaul-drawer] {
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  }
+}
+
+/* Prevent pull-to-refresh interfering with sheets */
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* Hide scrollbars globally — scrolling still works via touch, trackpad, and mouse wheel */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+*::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Opera */
+}
+
+/* Scroll container utility */
+.scroll-container {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Safe area for mobile bottom nav */
+.pb-safe {
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Gold glow utility */
+.gold-glow {
+  box-shadow: 0 0 16px 2px rgba(201, 168, 50, 0.18);
+}
+.gold-glow-text {
+  text-shadow: 0 0 20px rgba(201, 168, 50, 0.5);
+}
