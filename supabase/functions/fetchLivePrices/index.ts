@@ -1,5 +1,52 @@
-import { jsonResponse, handleOptions } from '../_shared/cors.ts';
-import { getClients, getUser } from '../_shared/auth.ts';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+function jsonResponse(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function handleOptions(req) {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+  return null;
+}
+
+function getClients(req) {
+  const authHeader = req.headers.get('Authorization') ?? '';
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+  return { userClient, adminClient };
+}
+
+async function getUser(userClient, adminClient) {
+  const { data: { user } } = await userClient.auth.getUser();
+  if (!user) return null;
+  const { data: roleRow } = await adminClient
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  return { id: user.id, email: user.email, role: roleRow?.role || 'user' };
+}
+
+function ownsOrAdmin(profile, user) {
+  return !!(user && profile && (profile.created_by_id === user.id || user.role === 'admin'));
+}
 
 const LIVE_URL = 'https://opensheet.elk.sh/1ZAx2PyhwhaujcVdXNDMp6-BPUbmtJ1ixjkbtffDhES4/live%20prices';
 
