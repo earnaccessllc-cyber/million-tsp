@@ -32,6 +32,8 @@ export default function ContributionsSettings() {
       contrib_roth_dollar: activeProfile.contrib_roth_dollar ?? '',
       contrib_loan_per_period: activeProfile.contrib_loan_per_period ?? '',
       loan_end_date: activeProfile.loan_end_date || '',
+      loan_original_amount: activeProfile.loan_original_amount ?? '',
+      loan_start_date: activeProfile.loan_start_date || '',
     });
   }, [activeProfile?.id]);
 
@@ -47,6 +49,12 @@ export default function ContributionsSettings() {
   const rothPct = parseFloat(local.contrib_roth_percent) || 0;
   const rothDollar = parseFloat(local.contrib_roth_dollar) || 0;
   const loanPerPeriod = parseFloat(local.contrib_loan_per_period) || 0;
+  const loanOriginalAmount = parseFloat(local.loan_original_amount) || 0;
+  const loanRepaid = activeProfile?.loan_repayments || 0;
+  const loanRemaining = Math.max(0, (activeProfile?.loan_original_amount || 0) - loanRepaid);
+  const loanPctPaid = activeProfile?.loan_original_amount > 0
+    ? Math.min(100, (loanRepaid / activeProfile.loan_original_amount) * 100)
+    : 0;
 
   const trad = resolveContrib(local.contrib_traditional_mode, tradPct, tradDollar, salary, paySchedule);
   const roth = resolveContrib(local.contrib_roth_mode, rothPct, rothDollar, salary, paySchedule);
@@ -86,6 +94,7 @@ export default function ContributionsSettings() {
       contrib_roth_percent: rothPct,
       contrib_roth_dollar: rothDollar,
       contrib_loan_per_period: loanPerPeriod,
+      loan_original_amount: loanOriginalAmount,
     });
     await refreshProfiles();
     setSaveStatus('saved');
@@ -200,34 +209,87 @@ export default function ContributionsSettings() {
               {/* Loan Repayment + End Date */}
               <div className="rounded-lg border border-border p-3 space-y-3">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Loan Repayment</p>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Amount per pay period</Label>
-                  <div className="relative mt-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Amount per pay period</Label>
+                    <div className="relative mt-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                      <Input
+                        type="number"
+                        placeholder="0"
+                        value={local.contrib_loan_per_period}
+                        onChange={e => set('contrib_loan_per_period', e.target.value)}
+                        className="h-9 text-sm pl-6"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Original loan amount</Label>
+                    <div className="relative mt-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                      <Input
+                        type="number"
+                        placeholder="0"
+                        value={local.loan_original_amount}
+                        onChange={e => set('loan_original_amount', e.target.value)}
+                        className="h-9 text-sm pl-6"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground -mt-1">Leave both at $0 if you have no active loan</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Loan Start Date</Label>
                     <Input
-                      type="number"
-                      placeholder="0"
-                      value={local.contrib_loan_per_period}
-                      onChange={e => set('contrib_loan_per_period', e.target.value)}
-                      className="h-9 text-sm pl-6"
+                      type="date"
+                      value={local.loan_start_date || ''}
+                      onChange={e => set('loan_start_date', e.target.value)}
+                      className="h-9 text-sm mt-1"
                     />
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Enter $0 if no active loan</p>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Loan Payment End Date</Label>
+                    <Input
+                      type="date"
+                      value={local.loan_end_date || ''}
+                      onChange={e => set('loan_end_date', e.target.value)}
+                      className="h-9 text-sm mt-1"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Loan Payment End Date</Label>
-                  <Input
-                    type="date"
-                    value={local.loan_end_date || ''}
-                    onChange={e => set('loan_end_date', e.target.value)}
-                    className="h-9 text-sm mt-1"
-                  />
-                  {local.loan_end_date && (
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      Paid off: {new Date(local.loan_end_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                    </p>
-                  )}
-                </div>
+                {local.loan_end_date && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Payoff date: {new Date(local.loan_end_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </p>
+                )}
+
+                {/* Live paydown progress — reflects actual repayments tracked by the
+                    nightly job, not the unsaved fields above */}
+                {activeProfile?.loan_original_amount > 0 && (
+                  <div className="rounded-lg bg-secondary/40 border border-border p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-foreground">Loan Progress</span>
+                      <span className="text-xs font-bold text-primary">{loanPctPaid.toFixed(1)}% paid off</span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all"
+                        style={{ width: `${loanPctPaid}%` }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Remaining balance</p>
+                        <p className="text-sm font-bold">{fmt(loanRemaining)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Repaid so far</p>
+                        <p className="text-sm font-bold text-gain">{fmt(loanRepaid)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Agency match status box */}

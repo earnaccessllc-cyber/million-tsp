@@ -79,7 +79,15 @@ function periodsElapsed(date, paySchedule) {
   return Math.floor(dayOfYear / 14);
 }
 
-function isPayDay(today, paySchedule) {
+// If the profile has a real known pay date (pay_date_anchor), use that to anchor
+// the biweekly cycle instead of assuming alignment to Jan 1 — agencies' actual
+// pay calendars don't line up with a generic Jan-1-based 14-day grid.
+function isPayDay(today, paySchedule, anchorDateStr) {
+  if (paySchedule === 'biweekly' && anchorDateStr) {
+    const anchor = new Date(anchorDateStr + 'T00:00:00');
+    const diffDays = Math.floor((today - anchor) / (1000 * 60 * 60 * 24));
+    return ((diffDays % 14) + 14) % 14 === 0;
+  }
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
   return periodsElapsed(today, paySchedule) !== periodsElapsed(yesterday, paySchedule);
@@ -122,7 +130,8 @@ function calcAgencyMatchDollar(agencyType, employeePct, salary, periods) {
 
 // Employee traditional + Roth contributions plus agency match, for whichever
 // profile fields are set — the actual dollar amount to add to the balance
-// on a pay day.
+// on a pay day. Loan repayments are handled separately (calcLoanRepaymentDue)
+// since they're capped by what's actually left owed on the loan.
 function calcPayPeriodContribution(profile) {
   const salary = profile.current_annual_salary || 0;
   const paySchedule = profile.pay_schedule || 'biweekly';
@@ -146,6 +155,18 @@ function calcPayPeriodContribution(profile) {
   const matchDollar = calcAgencyMatchDollar(agencyType, employeePct, salary, periods);
 
   return trad.dollar + roth.dollar + matchDollar;
+}
+
+// TSP loan repayments (principal + interest) are deposited back into the
+// account and invested per the participant's contribution allocation, same
+// as a regular contribution (confirmed via tsp.gov loan guidance) — but only
+// up to whatever's actually still owed on the loan.
+function calcLoanRepaymentDue(profile) {
+  const perPeriod = profile.contrib_loan_per_period || 0;
+  if (perPeriod <= 0 || !profile.loan_original_amount) return 0;
+  const alreadyRepaid = profile.loan_repayments || 0;
+  const remaining = Math.max(0, profile.loan_original_amount - alreadyRepaid);
+  return Math.min(perPeriod, remaining);
 }
 
 Deno.serve(async (req) => {
@@ -206,9 +227,14 @@ Deno.serve(async (req) => {
         const totalManual = profile.total_balance_manual || 0;
         const nonMfwTotal = Math.max(0, totalManual - mfwBal);
 
-        const contributionAmount = isPayDay(etNow, profile.pay_schedule || 'biweekly')
-          ? calcPayPeriodContribution(profile)
-          : 0;
+        const todayIsPayDay = isPayDay(etNow, profile.pay_schedule || 'biweekly', profile.pay_date_anchor);
+        const loanRepaymentAmount = todayIsPayDay ? calcLoanRepaymentDue(profile) : 0;
+        const contributionAmount = (todayIsPayDay ? calcPayPeriodContribution(profile) : 0) + loanRepaymentAmount;
+
+        // Fallback weighting for distributing today's contribution across funds
+        // when allocation_percent isn't set (dollar-entry profiles, or a selected
+        // fund sitting at 0%) — split by current balance share instead.
+        const fundsCurrentTotal = selectedFunds.reduce((s, f) => s + (f.balance || f.dollar_balance || 0), 0);
 
         let newTotalBalance = 0;
 
@@ -238,6 +264,17 @@ Deno.serve(async (req) => {
             }
           }
 
+          // Buy into this fund with today's contribution, split by allocation %
+          // (falling back to current-balance weighting when allocation % isn't
+          // meaningful — dollar-entry profiles, or a 0%-allocated selected fund).
+          if (contributionAmount > 0) {
+            const allocPct = (fund.allocation_percent || 0) / 100;
+            const fundShare = allocPct > 0
+              ? allocPct
+              : (fundsCurrentTotal > 0 ? (fund.balance || fund.dollar_balance || 0) / fundsCurrentTotal : 1 / selectedFunds.length);
+            newBalance += contributionAmount * fundShare;
+          }
+
           newTotalBalance += newBalance;
 
           await adminClient.from('fund_allocations').update({
@@ -255,7 +292,6 @@ Deno.serve(async (req) => {
         }
 
         newTotalBalance += mfwBal;
-        newTotalBalance += contributionAmount;
 
         const yesterday = new Date(etNow);
         yesterday.setDate(yesterday.getDate() - 1);
@@ -279,13 +315,16 @@ Deno.serve(async (req) => {
         }
 
         const profileUpdates = { total_balance_manual: newTotalBalance, balance_last_confirmed: today };
+        if (loanRepaymentAmount > 0) {
+          profileUpdates.loan_repayments = (profile.loan_repayments || 0) + loanRepaymentAmount;
+        }
         if (newTotalBalance > (profile.highest_balance || 0)) {
           profileUpdates.highest_balance = newTotalBalance;
           profileUpdates.highest_balance_date = today;
         }
         await adminClient.from('tsp_profiles').update(profileUpdates).eq('id', profile.id);
 
-        results.push({ profile_id: profile.id, success: true, newTotalBalance, dailyChange, contributionAmount });
+        results.push({ profile_id: profile.id, success: true, newTotalBalance, dailyChange, contributionAmount, loanRepaymentAmount });
       } catch (e) {
         results.push({ profile_id: profile.id, error: e.message });
       }
