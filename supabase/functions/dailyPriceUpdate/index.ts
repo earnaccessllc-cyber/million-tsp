@@ -65,6 +65,89 @@ function parsePercent(str) {
   return isNaN(val) ? null : val;
 }
 
+// Mirrors src/lib/contributionCalc.js's getPeriodsElapsed exactly, so "is this a
+// pay day" lines up with the same period boundaries the rest of the app already
+// uses for YTD math (14-day periods from Jan 1 for biweekly, calendar months for
+// monthly). Real TSP posting timing varies by agency/payroll provider with no
+// universal rule, so contributions post on the pay date itself.
+const PAY_PERIODS = { biweekly: 26, monthly: 12 };
+
+function periodsElapsed(date, paySchedule) {
+  const jan1 = new Date(date.getFullYear(), 0, 1);
+  const dayOfYear = Math.floor((date - jan1) / (1000 * 60 * 60 * 24));
+  if (paySchedule === 'monthly') return date.getMonth();
+  return Math.floor(dayOfYear / 14);
+}
+
+function isPayDay(today, paySchedule) {
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  return periodsElapsed(today, paySchedule) !== periodsElapsed(yesterday, paySchedule);
+}
+
+function resolveContribPctAndDollar(mode, pct, dollar, salary, periods) {
+  if (mode === 'percent') {
+    const p = pct || 0;
+    const d = salary ? (salary * (p / 100)) / periods : (dollar || 0);
+    return { pct: p, dollar: d };
+  }
+  const d = dollar || 0;
+  const p = salary ? (d * periods / salary) * 100 : (pct || 0);
+  return { pct: p, dollar: d };
+}
+
+// Mirrors src/lib/contributionCalc.js's calcAgencyMatch dollar amount (matchDollar + auto1Dollar).
+function calcAgencyMatchDollar(agencyType, employeePct, salary, periods) {
+  if (agencyType === 'csrs') return 0;
+
+  if (agencyType === 'usps') {
+    const e = employeePct;
+    let agencyPct;
+    if (e <= 0) agencyPct = 1;
+    else if (e <= 1) agencyPct = 2;
+    else if (e <= 2) agencyPct = 3;
+    else if (e <= 3) agencyPct = 4;
+    else if (e <= 4) agencyPct = 4.5;
+    else agencyPct = 5;
+    return salary ? (salary * (agencyPct / 100)) / periods : 0;
+  }
+
+  const auto1Dollar = salary ? (salary * 0.01) / periods : 0;
+  const matchOn3 = Math.min(employeePct, 3);
+  const matchOn2 = Math.min(Math.max(employeePct - 3, 0), 2) * 0.5;
+  const matchPct = matchOn3 + matchOn2;
+  const matchDollar = salary ? (salary * (matchPct / 100)) / periods : 0;
+  return matchDollar + auto1Dollar;
+}
+
+// Employee traditional + Roth contributions plus agency match, for whichever
+// profile fields are set — the actual dollar amount to add to the balance
+// on a pay day.
+function calcPayPeriodContribution(profile) {
+  const salary = profile.current_annual_salary || 0;
+  const paySchedule = profile.pay_schedule || 'biweekly';
+  const periods = PAY_PERIODS[paySchedule] || 26;
+
+  const trad = resolveContribPctAndDollar(
+    profile.contrib_traditional_mode || 'percent',
+    profile.contrib_traditional_percent || 0,
+    profile.contrib_traditional_dollar || 0,
+    salary, periods
+  );
+  const roth = resolveContribPctAndDollar(
+    profile.contrib_roth_mode || 'percent',
+    profile.contrib_roth_percent || 0,
+    profile.contrib_roth_dollar || 0,
+    salary, periods
+  );
+
+  const employeePct = trad.pct + roth.pct;
+  const agencyType = profile.retirement_system === 'CSRS' ? 'csrs' : (profile.agency_type || 'usps');
+  const matchDollar = calcAgencyMatchDollar(agencyType, employeePct, salary, periods);
+
+  return trad.dollar + roth.dollar + matchDollar;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -123,6 +206,10 @@ Deno.serve(async (req) => {
         const totalManual = profile.total_balance_manual || 0;
         const nonMfwTotal = Math.max(0, totalManual - mfwBal);
 
+        const contributionAmount = isPayDay(etNow, profile.pay_schedule || 'biweekly')
+          ? calcPayPeriodContribution(profile)
+          : 0;
+
         let newTotalBalance = 0;
 
         for (const fund of selectedFunds) {
@@ -168,6 +255,7 @@ Deno.serve(async (req) => {
         }
 
         newTotalBalance += mfwBal;
+        newTotalBalance += contributionAmount;
 
         const yesterday = new Date(etNow);
         yesterday.setDate(yesterday.getDate() - 1);
@@ -197,7 +285,7 @@ Deno.serve(async (req) => {
         }
         await adminClient.from('tsp_profiles').update(profileUpdates).eq('id', profile.id);
 
-        results.push({ profile_id: profile.id, success: true, newTotalBalance, dailyChange });
+        results.push({ profile_id: profile.id, success: true, newTotalBalance, dailyChange, contributionAmount });
       } catch (e) {
         results.push({ profile_id: profile.id, error: e.message });
       }
