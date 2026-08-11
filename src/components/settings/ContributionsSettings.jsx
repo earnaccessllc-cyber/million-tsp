@@ -30,14 +30,23 @@ export default function ContributionsSettings() {
       contrib_roth_mode: activeProfile.contrib_roth_mode || 'percent',
       contrib_roth_percent: activeProfile.contrib_roth_percent ?? '',
       contrib_roth_dollar: activeProfile.contrib_roth_dollar ?? '',
-      contrib_loan_per_period: activeProfile.contrib_loan_per_period ?? '',
-      loan_end_date: activeProfile.loan_end_date || '',
-      loan_original_amount: activeProfile.loan_original_amount ?? '',
-      loan_start_date: activeProfile.loan_start_date || '',
     });
+    setLoans((activeProfile.loans || []).map(l => ({ ...l })));
   }, [activeProfile?.id]);
 
   const set = (field, value) => setLocal(prev => ({ ...prev, [field]: value }));
+
+  const [loans, setLoans] = useState([]);
+  const updateLoan = (idx, field, value) => {
+    setLoans(prev => prev.map((l, i) => i === idx ? { ...l, [field]: value } : l));
+  };
+  const addLoan = () => {
+    setLoans(prev => [...prev, {
+      id: `loan-${Date.now()}`, label: `Loan ${prev.length + 1}`,
+      original_amount: '', start_date: '', per_period_payment: '', repaid: 0,
+    }]);
+  };
+  const removeLoan = (idx) => setLoans(prev => prev.filter((_, i) => i !== idx));
 
   const salary = parseFloat(local.current_annual_salary) || 0;
   const paySchedule = local.pay_schedule || 'biweekly';
@@ -48,13 +57,18 @@ export default function ContributionsSettings() {
   const tradDollar = parseFloat(local.contrib_traditional_dollar) || 0;
   const rothPct = parseFloat(local.contrib_roth_percent) || 0;
   const rothDollar = parseFloat(local.contrib_roth_dollar) || 0;
-  const loanPerPeriod = parseFloat(local.contrib_loan_per_period) || 0;
-  const loanOriginalAmount = parseFloat(local.loan_original_amount) || 0;
-  const loanRepaid = activeProfile?.loan_repayments || 0;
-  const loanRemaining = Math.max(0, (activeProfile?.loan_original_amount || 0) - loanRepaid);
-  const loanPctPaid = activeProfile?.loan_original_amount > 0
-    ? Math.min(100, (loanRepaid / activeProfile.loan_original_amount) * 100)
-    : 0;
+
+  // Live progress per loan, read from activeProfile.loans (DB-tracked truth,
+  // updated nightly) — not the editable draft fields below.
+  const liveLoans = activeProfile?.loans || [];
+  const loanProgress = (loanId) => {
+    const l = liveLoans.find(x => x.id === loanId);
+    if (!l || !l.original_amount) return null;
+    const repaid = l.repaid || 0;
+    const remaining = Math.max(0, l.original_amount - repaid);
+    const pct = Math.min(100, (repaid / l.original_amount) * 100);
+    return { repaid, remaining, pct };
+  };
 
   const trad = resolveContrib(local.contrib_traditional_mode, tradPct, tradDollar, salary, paySchedule);
   const roth = resolveContrib(local.contrib_roth_mode, rothPct, rothDollar, salary, paySchedule);
@@ -86,6 +100,14 @@ export default function ContributionsSettings() {
 
   const handleSave = async () => {
     setSaveStatus('saving');
+    const cleanedLoans = loans
+      .filter(l => (parseFloat(l.original_amount) || 0) > 0)
+      .map(l => ({
+        ...l,
+        original_amount: parseFloat(l.original_amount) || 0,
+        per_period_payment: parseFloat(l.per_period_payment) || 0,
+        repaid: parseFloat(l.repaid) || 0,
+      }));
     await base44.entities.TSPProfile.update(activeProfile.id, {
       ...local,
       current_annual_salary: salary,
@@ -93,8 +115,7 @@ export default function ContributionsSettings() {
       contrib_traditional_dollar: tradDollar,
       contrib_roth_percent: rothPct,
       contrib_roth_dollar: rothDollar,
-      contrib_loan_per_period: loanPerPeriod,
-      loan_original_amount: loanOriginalAmount,
+      loans: cleanedLoans,
     });
     await refreshProfiles();
     setSaveStatus('saved');
@@ -206,90 +227,111 @@ export default function ContributionsSettings() {
                 </p>
               )}
 
-              {/* Loan Repayment + End Date */}
+              {/* Loans — a profile can have more than one active TSP loan */}
               <div className="rounded-lg border border-border p-3 space-y-3">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Loan Repayment</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Amount per pay period</Label>
-                    <div className="relative mt-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                      <Input
-                        type="number"
-                        placeholder="0"
-                        value={local.contrib_loan_per_period}
-                        onChange={e => set('contrib_loan_per_period', e.target.value)}
-                        className="h-9 text-sm pl-6"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Original loan amount</Label>
-                    <div className="relative mt-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                      <Input
-                        type="number"
-                        placeholder="0"
-                        value={local.loan_original_amount}
-                        onChange={e => set('loan_original_amount', e.target.value)}
-                        className="h-9 text-sm pl-6"
-                      />
-                    </div>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">TSP Loans</p>
+                  <button
+                    type="button"
+                    onClick={addLoan}
+                    className="text-xs font-semibold text-primary"
+                    style={{ minHeight: 'unset' }}
+                  >
+                    + Add loan
+                  </button>
                 </div>
-                <p className="text-[10px] text-muted-foreground -mt-1">Leave both at $0 if you have no active loan</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Loan Start Date</Label>
-                    <Input
-                      type="date"
-                      value={local.loan_start_date || ''}
-                      onChange={e => set('loan_start_date', e.target.value)}
-                      className="h-9 text-sm mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Loan Payment End Date</Label>
-                    <Input
-                      type="date"
-                      value={local.loan_end_date || ''}
-                      onChange={e => set('loan_end_date', e.target.value)}
-                      className="h-9 text-sm mt-1"
-                    />
-                  </div>
-                </div>
-                {local.loan_end_date && (
-                  <p className="text-[10px] text-muted-foreground">
-                    Payoff date: {new Date(local.loan_end_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                  </p>
+
+                {loans.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground">No active loans on file.</p>
                 )}
 
-                {/* Live paydown progress — reflects actual repayments tracked by the
-                    nightly job, not the unsaved fields above */}
-                {activeProfile?.loan_original_amount > 0 && (
-                  <div className="rounded-lg bg-secondary/40 border border-border p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-foreground">Loan Progress</span>
-                      <span className="text-xs font-bold text-primary">{loanPctPaid.toFixed(1)}% paid off</span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full bg-primary rounded-full transition-all"
-                        style={{ width: `${loanPctPaid}%` }}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <div>
-                        <p className="text-[10px] text-muted-foreground">Remaining balance</p>
-                        <p className="text-sm font-bold">{fmt(loanRemaining)}</p>
+                {loans.map((loan, idx) => {
+                  const progress = loanProgress(loan.id);
+                  return (
+                    <div key={loan.id || idx} className="rounded-lg bg-secondary/30 border border-border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Input
+                          value={loan.label || ''}
+                          onChange={e => updateLoan(idx, 'label', e.target.value)}
+                          placeholder={`Loan ${idx + 1}`}
+                          className="h-7 text-xs font-semibold w-32 bg-transparent border-none px-0"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeLoan(idx)}
+                          className="text-[10px] text-loss"
+                          style={{ minHeight: 'unset' }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Original amount</Label>
+                          <div className="relative mt-1">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              value={loan.original_amount}
+                              onChange={e => updateLoan(idx, 'original_amount', e.target.value)}
+                              className="h-9 text-sm pl-6"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Amount per pay period</Label>
+                          <div className="relative mt-1">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              value={loan.per_period_payment}
+                              onChange={e => updateLoan(idx, 'per_period_payment', e.target.value)}
+                              className="h-9 text-sm pl-6"
+                            />
+                          </div>
+                        </div>
                       </div>
                       <div>
-                        <p className="text-[10px] text-muted-foreground">Repaid so far</p>
-                        <p className="text-sm font-bold text-gain">{fmt(loanRepaid)}</p>
+                        <Label className="text-xs text-muted-foreground">Loan Start Date</Label>
+                        <Input
+                          type="date"
+                          value={loan.start_date || ''}
+                          onChange={e => updateLoan(idx, 'start_date', e.target.value)}
+                          className="h-9 text-sm mt-1"
+                        />
                       </div>
+
+                      {/* Live paydown progress — reflects actual repayments tracked by the
+                          nightly job, not the unsaved fields above */}
+                      {progress && (
+                        <div className="rounded-lg bg-muted/60 border border-border p-2.5 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-foreground">Progress</span>
+                            <span className="text-[11px] font-bold text-primary">{progress.pct.toFixed(1)}% paid off</span>
+                          </div>
+                          <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all"
+                              style={{ width: `${progress.pct}%` }}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 pt-0.5">
+                            <div>
+                              <p className="text-[10px] text-muted-foreground">Remaining</p>
+                              <p className="text-xs font-bold">{fmt(progress.remaining)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-muted-foreground">Repaid so far</p>
+                              <p className="text-xs font-bold text-gain">{fmt(progress.repaid)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
 
               {/* Agency match status box */}
@@ -370,7 +412,8 @@ export default function ContributionsSettings() {
 
               {/* YTD Activity */}
               {(() => {
-                const ytd = calcYTD({ ...activeProfile, ...local, current_annual_salary: salary, contrib_traditional_percent: tradPct, contrib_traditional_dollar: tradDollar, contrib_roth_percent: rothPct, contrib_roth_dollar: rothDollar, contrib_loan_per_period: loanPerPeriod });
+                const totalLoanPerPeriod = loans.reduce((s, l) => s + (parseFloat(l.per_period_payment) || 0), 0);
+                const ytd = calcYTD({ ...activeProfile, ...local, current_annual_salary: salary, contrib_traditional_percent: tradPct, contrib_traditional_dollar: tradDollar, contrib_roth_percent: rothPct, contrib_roth_dollar: rothDollar, contrib_loan_per_period: totalLoanPerPeriod });
                 if (!ytd.periodsElapsed || !salary) return null;
                 const isCSRSForYTD = effectiveAgencyType === 'csrs';
                 const isStandardFERS = effectiveAgencyType === 'standard_fers';

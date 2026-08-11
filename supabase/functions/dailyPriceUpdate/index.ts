@@ -160,13 +160,21 @@ function calcPayPeriodContribution(profile) {
 // TSP loan repayments (principal + interest) are deposited back into the
 // account and invested per the participant's contribution allocation, same
 // as a regular contribution (confirmed via tsp.gov loan guidance) — but only
-// up to whatever's actually still owed on the loan.
-function calcLoanRepaymentDue(profile) {
-  const perPeriod = profile.contrib_loan_per_period || 0;
-  if (perPeriod <= 0 || !profile.loan_original_amount) return 0;
-  const alreadyRepaid = profile.loan_repayments || 0;
-  const remaining = Math.max(0, profile.loan_original_amount - alreadyRepaid);
-  return Math.min(perPeriod, remaining);
+// up to whatever's actually still owed on that specific loan. A profile can
+// have more than one active loan (general purpose + residential, etc.), each
+// tracked independently in profile.loans.
+function calcLoanRepayments(profile) {
+  const loans = Array.isArray(profile.loans) ? profile.loans : [];
+  let total = 0;
+  const updatedLoans = loans.map((loan) => {
+    const perPeriod = loan.per_period_payment || 0;
+    const alreadyRepaid = loan.repaid || 0;
+    const remaining = Math.max(0, (loan.original_amount || 0) - alreadyRepaid);
+    const due = Math.min(perPeriod, remaining);
+    total += due;
+    return due > 0 ? { ...loan, repaid: alreadyRepaid + due } : loan;
+  });
+  return { total, updatedLoans };
 }
 
 Deno.serve(async (req) => {
@@ -228,7 +236,8 @@ Deno.serve(async (req) => {
         const nonMfwTotal = Math.max(0, totalManual - mfwBal);
 
         const todayIsPayDay = isPayDay(etNow, profile.pay_schedule || 'biweekly', profile.pay_date_anchor);
-        const loanRepaymentAmount = todayIsPayDay ? calcLoanRepaymentDue(profile) : 0;
+        const loanResult = todayIsPayDay ? calcLoanRepayments(profile) : { total: 0, updatedLoans: profile.loans };
+        const loanRepaymentAmount = loanResult.total;
         const contributionAmount = (todayIsPayDay ? calcPayPeriodContribution(profile) : 0) + loanRepaymentAmount;
 
         // Fallback weighting for distributing today's contribution across funds
@@ -316,7 +325,7 @@ Deno.serve(async (req) => {
 
         const profileUpdates = { total_balance_manual: newTotalBalance, balance_last_confirmed: today };
         if (loanRepaymentAmount > 0) {
-          profileUpdates.loan_repayments = (profile.loan_repayments || 0) + loanRepaymentAmount;
+          profileUpdates.loans = loanResult.updatedLoans;
         }
         if (newTotalBalance > (profile.highest_balance || 0)) {
           profileUpdates.highest_balance = newTotalBalance;
