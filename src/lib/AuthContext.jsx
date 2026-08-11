@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { supabase, base44 } from '@/api/base44Client';
+import { syncBiometricRefreshToken, disableBiometricLogin } from '@/lib/biometricAuth';
 
 const AuthContext = createContext();
 
@@ -34,6 +35,9 @@ export const AuthProvider = ({ children }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         checkUserAuth();
+        // Keep the on-device biometric-login credential (if enabled) pointed
+        // at the latest refresh token — Supabase rotates it on every use.
+        syncBiometricRefreshToken(session);
       } else {
         setUser(null);
         setIsAuthenticated(false);
@@ -47,6 +51,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     base44.auth.logout();
+    disableBiometricLogin();
     setUser(null);
     setIsAuthenticated(false);
     window.location.href = '/';

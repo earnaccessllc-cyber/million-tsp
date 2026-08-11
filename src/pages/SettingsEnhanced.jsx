@@ -8,6 +8,7 @@ import OpeningBalanceSettings from '@/components/settings/OpeningBalanceSettings
 import AppGuide from '@/components/settings/AppGuide';
 import NotificationSettings from '@/components/settings/NotificationSettings';
 import EntryMethodSettings from '@/components/settings/EntryMethodSettings';
+import BiometricLoginSettings from '@/components/settings/BiometricLoginSettings';
 import CurrentBalanceSettings from '@/components/settings/CurrentBalanceSettings';
 import ContributionsSettings from '@/components/settings/ContributionsSettings';
 import TaxEstimator from '@/components/settings/TaxEstimator';
@@ -63,6 +64,7 @@ export default function SettingsEnhanced() {
 
         <PlanStatusCard profile={activeProfile} />
         <ThemePicker />
+        <BiometricLoginSettings />
         <ProfileManager />
         <OpeningBalanceSettings />
         <CurrentBalanceSettings />
