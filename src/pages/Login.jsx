@@ -1,12 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Eye, EyeOff, Shield, ScanFace } from 'lucide-react';
-import {
-  getBiometryInfo,
-  hasBiometricLoginEnabled,
-  enableBiometricLogin,
-  signInWithBiometrics,
-} from '@/lib/biometricAuth';
+import { Eye, EyeOff, Shield } from 'lucide-react';
 
 function GoldInput({ type, placeholder, value, onChange, id, rightElement }) {
   return (
@@ -74,60 +68,12 @@ function Logo() {
   );
 }
 
-// ─── Enable-biometric offer (shown once, right after a password sign-in) ────
-function EnableBiometricOffer({ label, onDone }) {
-  const [busy, setBusy] = useState(false);
-
-  const handleEnable = async () => {
-    setBusy(true);
-    try {
-      await enableBiometricLogin();
-    } catch {
-      // User declined the OS prompt or it failed — just proceed, unenabled.
-    }
-    onDone();
-  };
-
-  return (
-    <div className="w-full space-y-4 text-center">
-      <ScanFace className="w-10 h-10 mx-auto" style={{ color: '#FFD700' }} />
-      <h2 className="text-xl font-orbitron font-bold" style={{ color: '#FFD700' }}>Use {label}?</h2>
-      <p className="text-sm font-rajdhani" style={{ color: 'rgba(255,255,255,0.55)' }}>
-        Sign in faster next time with {label} instead of your password.
-      </p>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={handleEnable}
-        className="w-full py-3.5 rounded-lg text-base font-bold font-rajdhani tracking-widest transition-all disabled:opacity-50"
-        style={{ background: '#FFD700', color: '#080800', minHeight: 50 }}
-      >
-        {busy ? 'ENABLING...' : `ENABLE ${label.toUpperCase()}`}
-      </button>
-      <button type="button" onClick={onDone} className="text-sm font-rajdhani" style={{ color: 'rgba(255,255,255,0.45)', minHeight: 'unset' }}>
-        Not Now
-      </button>
-    </div>
-  );
-}
-
 // ─── Login Screen ───────────────────────────────────────────────────────────
 function LoginScreen({ onGoSignup, onGoForgot, onSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [biometric, setBiometric] = useState({ isAvailable: false, label: 'Biometric Login', enabled: false });
-  const [biometricBusy, setBiometricBusy] = useState(false);
-  const [offerBiometric, setOfferBiometric] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      const info = await getBiometryInfo();
-      const enabled = info.isAvailable && await hasBiometricLoginEnabled();
-      setBiometric({ ...info, enabled });
-    })();
-  }, []);
 
   const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
@@ -142,14 +88,7 @@ function LoginScreen({ onGoSignup, onGoForgot, onSuccess }) {
       if (result?.access_token) {
         base44.auth.setToken(result.access_token);
       }
-      // Offer to enable biometric login for next time, if this device
-      // supports it and hasn't already been set up.
-      if (biometric.isAvailable && !biometric.enabled) {
-        setOfferBiometric(true);
-        setLoading(false);
-      } else {
-        onSuccess();
-      }
+      onSuccess();
     } catch (err) {
       const msg = err?.data?.message || err?.message || '';
       if (/not found|no user|email/i.test(msg)) setError('No account found with that email.');
@@ -159,45 +98,8 @@ function LoginScreen({ onGoSignup, onGoForgot, onSuccess }) {
     }
   };
 
-  const handleBiometricSignIn = async () => {
-    setError('');
-    setBiometricBusy(true);
-    try {
-      await signInWithBiometrics();
-      onSuccess();
-    } catch (err) {
-      setError(err?.message || `${biometric.label} sign-in failed. Please use your password.`);
-      setBiometricBusy(false);
-    }
-  };
-
-  if (offerBiometric) {
-    return <EnableBiometricOffer label={biometric.label} onDone={onSuccess} />;
-  }
-
   return (
     <form onSubmit={handleSubmit} className="w-full space-y-4">
-      {biometric.enabled && (
-        <>
-          <button
-            type="button"
-            disabled={biometricBusy}
-            onClick={handleBiometricSignIn}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-lg text-base font-bold font-rajdhani tracking-widest transition-all disabled:opacity-50"
-            style={{ background: 'rgba(255,215,0,0.08)', border: '1.5px solid #FFD700', color: '#FFD700', minHeight: 50 }}
-          >
-            <ScanFace className="w-5 h-5" />
-            {biometricBusy ? 'VERIFYING...' : `SIGN IN WITH ${biometric.label.toUpperCase()}`}
-          </button>
-
-          <div className="flex items-center gap-3 my-2">
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,215,0,0.15)' }} />
-            <span className="text-xs font-rajdhani" style={{ color: 'rgba(255,255,255,0.3)' }}>OR SIGN IN WITH PASSWORD</span>
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,215,0,0.15)' }} />
-          </div>
-        </>
-      )}
-
       <GoldInput id="email" type="email" placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} />
       <PasswordInput id="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
 
