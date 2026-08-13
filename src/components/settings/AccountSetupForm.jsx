@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useProfile } from '@/context/ProfileContext';
+import { useAuth } from '@/lib/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { LogOut } from 'lucide-react';
 import { ALL_FUNDS } from '@/lib/tspFunds';
 import { fetchLivePricesSheet } from '@/functions/fetchLivePricesSheet';
 
@@ -76,6 +78,7 @@ function FundRow({ fund, checked, pct, onCheck, onPct }) {
 
 export default function AccountSetupForm() {
   const { refreshProfiles } = useProfile();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
 
@@ -212,6 +215,24 @@ export default function AccountSetupForm() {
           <h2 className="text-lg font-bold tracking-wider" style={{ color: '#C9A832' }}>ACCOUNT SETUP</h2>
           <p className="text-xs text-muted-foreground">Complete your profile to start tracking</p>
         </div>
+      </div>
+
+      {/* Who you're signed in as — with a way back to the login screen.
+          This is the only exit from the setup screen, which renders before
+          the Settings page's own Sign Out button and hides the nav chrome. */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-card border border-border">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">Signed in as</p>
+          <p className="text-sm font-medium text-foreground truncate">{user?.email || 'your account'}</p>
+        </div>
+        <button
+          type="button"
+          onClick={logout}
+          className="flex items-center gap-1.5 flex-shrink-0 px-3 py-2 rounded-lg text-sm font-medium border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors min-h-[44px]"
+        >
+          <LogOut className="w-4 h-4" />
+          Sign Out
+        </button>
       </div>
 
       {/* Section 1 — Balance */}

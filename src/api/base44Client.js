@@ -135,8 +135,16 @@ const auth = {
     return true;
   },
 
-  logout(redirect = true) {
-    supabase.auth.signOut();
+  // Must await signOut() before navigating — it clears the persisted session
+  // from storage asynchronously. Hard-navigating first can race it and leave
+  // the session behind, silently signing the user back in on next load.
+  async logout(redirect = true) {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Network failure revoking server-side — the local session is still
+      // cleared below so the user genuinely lands back on the login screen.
+    }
     if (redirect) window.location.href = '/';
   },
 };
