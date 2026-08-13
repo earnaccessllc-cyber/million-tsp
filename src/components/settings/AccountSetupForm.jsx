@@ -213,6 +213,7 @@ export default function AccountSetupForm() {
           <p className="text-xs text-muted-foreground">Complete your profile to start tracking</p>
         </div>
       </div>
+      <div className="flex justify-end"><button type="button" onClick={() => base44.auth.logout()} className="text-xs font-semibold px-3 py-2 rounded-lg border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors">Sign Out</button></div>
 
       {/* Section 1 — Balance */}
       <section className="space-y-4">
