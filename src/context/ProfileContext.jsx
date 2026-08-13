@@ -1,29 +1,24 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/lib/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 const ProfileContext = createContext();
 
 export function ProfileProvider({ children }) {
-  const [currentUserId, setCurrentUserId] = useState(null);
-  const [userIdResolved, setUserIdResolved] = useState(false);
+  // ProfileProvider only ever mounts once AuthContext has already resolved
+  // an authenticated user (see App.jsx), so `user` is guaranteed here —
+  // no need for a second, independent auth.me() round-trip with its own
+  // race/timeout (that duplicate call used to time out on slow connections
+  // and wrongly report "no profile", bouncing the user into onboarding).
+  const { user } = useAuth();
+  const currentUserId = user?.id || null;
   const queryClient = useQueryClient();
 
-  // Resolve the current user ID on mount — used to scope the query key
-  // so that switching Google accounts in the same browser never leaks data.
-  // Also clear the old localStorage key that was the source of cross-user leakage.
+  // Clear the old localStorage keys that were the source of cross-user leakage.
   useEffect(() => {
     localStorage.removeItem('tsp-active-profile');
     localStorage.removeItem('onboardingComplete');
-    // Hard timeout: if auth.me() takes >4s, unblock the UI anyway
-    const timeout = setTimeout(() => setUserIdResolved(true), 4000);
-    base44.auth.me().then(u => {
-      if (u?.id) setCurrentUserId(u.id);
-    }).catch(() => {}).finally(() => {
-      clearTimeout(timeout);
-      setUserIdResolved(true);
-    });
-    return () => clearTimeout(timeout);
   }, []);
 
   // Base44 entity SDK automatically filters by created_by_id (the logged-in user).
@@ -47,8 +42,9 @@ export function ProfileProvider({ children }) {
 
   const profiles = rawProfiles.slice(0, 1); // always expose at most one
 
-  // Consider loading until userId is resolved
-  const isLoading = !userIdResolved || (!!currentUserId && queryLoading);
+  // currentUserId is available as soon as this provider mounts (see above),
+  // so loading is just whether the profile query itself is in flight.
+  const isLoading = !!currentUserId && queryLoading;
 
   // The active profile is always the single profile for this user.
   const activeProfile = profiles[0] || null;
