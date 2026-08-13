@@ -3,7 +3,7 @@
   "appName": "MillionTSP",
   "webDir": "dist",
   "server": {
-    "url": "https://REPLACE-WITH-YOUR-PUBLISHED-APP-URL.base44.app",
+    "url": "https://milliontsp.com",
     "cleartext": false,
     "androidScheme": "https"
   },
