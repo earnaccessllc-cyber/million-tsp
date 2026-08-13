@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CheckCircle2, ExternalLink, DollarSign } from 'lucide-react';
 import MFWHoldingsTracker from '@/components/settings/MFWHoldingsTracker';
+import { rebalanceFundAllocations } from '@/lib/rebalanceFunds';
 
 function formatDate(dateStr) {
   if (!dateStr) return null;
@@ -45,6 +46,7 @@ export default function CurrentBalanceSettings() {
       has_mfw: hasMfw,
       ...(!hasMfw ? { mfw_balance: 0, mfw_holdings: [] } : {}),
     });
+    await rebalanceFundAllocations(activeProfile.id, (parseFloat(totalBalance) || 0) - (hasMfw ? (activeProfile.mfw_balance || 0) : 0));
     await refreshProfiles();
     setSaving(false);
     setSaved(true);
