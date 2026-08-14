@@ -223,21 +223,28 @@ export default function FundAllocationEditor({ profileId, funds, onSaved }) {
     // Invalidate so real data refreshes after optimistic update
     queryClient.invalidateQueries({ queryKey: fundKey });
 
-    // Step 3: Verify — re-add MFW for total display, and actually apply it as the current balance
+    // Step 3: Verify — report how the split adds up, but never write it back as
+    // the current balance.
+    //
+    // Fund balances here are derived FROM the total (nonMfwTotal × each
+    // allocation %), not measured independently — no price data feeds into
+    // them. So verifiedTotal is just nonMfwTotal × (sum of percentages).
+    // Writing verifiedTotal + newMfwBal back over total_balance_manual therefore
+    // can never add information, and whenever the percentages don't sum to
+    // exactly 100% it silently shrinks the balance by the shortfall. Saving
+    // repeatedly compounded that, ratcheting the total down until only the MFW
+    // portion was left. The user-entered total is the source of truth; it is
+    // only ever changed from the balance fields the user actually edits (and
+    // from the MFW percent above, which resizes MFW within that same total).
     const grandTotal = verifiedTotal + newMfwBal;
     const diff = Math.abs(grandTotal - totalManual);
     if (verifiedTotal > 0) {
-      await base44.entities.TSPProfile.update(activeProfile.id, {
-        total_balance_manual: grandTotal,
-        balance_last_confirmed: today,
-      });
-      await refreshProfiles();
       setVerifyMsg(diff < 1
-        ? `✅ Shares calculated. Balance verified: $${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-        : `✅ Current balance updated to $${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} from live prices`);
+        ? `✅ Shares calculated. Allocations account for the full balance: $${totalManual.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : `⚠️ Shares calculated, but your fund percentages only account for $${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} of your $${totalManual.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} balance. Check that your percentages total 100%. Your balance was left unchanged.`);
     }
 
-    toast({ title: 'Fund allocations saved', description: 'Shares back-calculated from closing prices and current balance updated.' });
+    toast({ title: 'Fund allocations saved', description: 'Shares back-calculated from closing prices.' });
     onSaved?.();
   };
 
