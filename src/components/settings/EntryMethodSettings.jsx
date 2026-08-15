@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { useProfile } from '@/context/ProfileContext';
 import { Button } from '@/components/ui/button';
 import { useQueryClient } from '@tanstack/react-query';
-import { Percent, DollarSign, ArrowRight, Save } from 'lucide-react';
+import { Percent, DollarSign, ArrowRight, Save, Layers } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 export default function EntryMethodSettings() {
@@ -62,7 +62,30 @@ export default function EntryMethodSettings() {
             </div>
           </div>
         </button>
+
+        <button
+          onClick={() => setMethod('shares')}
+          className={`w-full p-3 rounded-xl border text-left transition-all ${method === 'shares' ? 'bg-primary/10 border-primary' : 'border-border hover:border-primary/30'}`}
+        >
+          <div className="flex items-center gap-3">
+            <div className={`p-1.5 rounded-lg ${method === 'shares' ? 'bg-primary/20' : 'bg-muted'}`}>
+              <Layers className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">Share Based <span className="text-[10px] font-normal text-primary">— matches TSP</span></p>
+              <p className="text-xs text-muted-foreground">Enter shares per fund; balance = shares × daily share price</p>
+            </div>
+          </div>
+        </button>
       </div>
+
+      {method === 'shares' && (
+        <p className="text-[10px] text-muted-foreground leading-relaxed">
+          How TSP actually works: you hold a share count in each fund and the balance is shares ×
+          that day's published share price. Share counts change only when money moves, so your
+          allocation drifts as funds diverge — the other methods reset it to target every night.
+        </p>
+      )}
 
       {method !== current && (
         <Button onClick={handleSave} disabled={saving} size="sm" className="w-full">
