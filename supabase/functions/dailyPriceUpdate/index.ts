@@ -17,18 +17,22 @@ function jsonResponse(body, status = 200) {
 // Meant to run on a nightly schedule (Supabase Cron Trigger), not from the browser.
 const LIVE_URL = 'https://opensheet.elk.sh/1ZAx2PyhwhaujcVdXNDMp6-BPUbmtJ1ixjkbtffDhES4/live%20prices';
 
+// Maps the live-prices sheet's fund labels to the exact fund_name strings
+// stored in fund_allocations (see src/lib/tspFunds.js) — core funds keep
+// their "X Fund" suffix, lifecycle funds get a space before the year
+// ("L2030" on the sheet -> "L 2030" in the DB).
 const DISPLAY_TO_KEY = {
-  'G Fund': 'G', 'F Fund': 'F', 'C Fund': 'C', 'S Fund': 'S', 'I Fund': 'I',
-  'L Income': 'L Income', 'L2030': 'L2030', 'L2035': 'L2035', 'L2040': 'L2040',
-  'L2045': 'L2045', 'L2050': 'L2050', 'L2055': 'L2055', 'L2060': 'L2060',
-  'L2065': 'L2065', 'L2070': 'L2070', 'L2075': 'L2075',
+  'G Fund': 'G Fund', 'F Fund': 'F Fund', 'C Fund': 'C Fund', 'S Fund': 'S Fund', 'I Fund': 'I Fund',
+  'L Income': 'L Income', 'L2030': 'L 2030', 'L2035': 'L 2035', 'L2040': 'L 2040',
+  'L2045': 'L 2045', 'L2050': 'L 2050', 'L2055': 'L 2055', 'L2060': 'L 2060',
+  'L2065': 'L 2065', 'L2070': 'L 2070', 'L2075': 'L 2075',
 };
 
 const JAN1_PRICES = {
-  G: 19.5922, F: 20.8602, C: 109.7449, S: 101.6677, I: 56.0292,
-  'L Income': 29.2952, L2030: 58.3022, L2035: 17.7506, L2040: 68.0819,
-  L2045: 18.8435, L2050: 41.7575, L2055: 21.5591, L2060: 21.5566,
-  L2065: 21.5541, L2070: 12.7748, L2075: 11.1588,
+  'G Fund': 19.5922, 'F Fund': 20.8602, 'C Fund': 109.7449, 'S Fund': 101.6677, 'I Fund': 56.0292,
+  'L Income': 29.2952, 'L 2030': 58.3022, 'L 2035': 17.7506, 'L 2040': 68.0819,
+  'L 2045': 18.8435, 'L 2050': 41.7575, 'L 2055': 21.5591, 'L 2060': 21.5566,
+  'L 2065': 21.5541, 'L 2070': 12.7748, 'L 2075': 11.1588,
 };
 
 const MARKET_HOLIDAYS = new Set([
