@@ -35,6 +35,7 @@ export default function ShareHoldingsEditor({ profileId, funds, onSaved }) {
         is_selected: existing?.is_selected ?? false,
         shares: existing?.shares != null ? String(existing.shares) : '',
         share_price: existing?.share_price ?? 0,
+        contribution_percent: existing?.contribution_percent ? String(existing.contribution_percent) : '',
         id: existing?.id ?? null,
       };
     })
@@ -48,6 +49,14 @@ export default function ShareHoldingsEditor({ profileId, funds, onSaved }) {
 
   const setShares = (fund_name, val) =>
     setRows(prev => prev.map(r => r.fund_name === fund_name ? { ...r, shares: val } : r));
+
+  const setContribPct = (fund_name, val) =>
+    setRows(prev => prev.map(r => r.fund_name === fund_name ? { ...r, contribution_percent: val } : r));
+
+  // "Future Investment" on TSP.gov — where new contributions go. Separate from
+  // the current mix below, which is just an outcome of what you hold today.
+  const contribTotal = rows.filter(r => r.is_selected)
+    .reduce((s, r) => s + (parseFloat(r.contribution_percent) || 0), 0);
 
   const toggle = (fund_name) =>
     setRows(prev => prev.map(r => r.fund_name === fund_name ? { ...r, is_selected: !r.is_selected } : r));
@@ -68,6 +77,7 @@ export default function ShareHoldingsEditor({ profileId, funds, onSaved }) {
         balance,
         dollar_balance: balance,
         share_price: r.share_price || 0,
+        contribution_percent: r.is_selected ? (parseFloat(r.contribution_percent) || 0) : 0,
       };
       if (r.id) {
         await base44.entities.FundAllocation.update(r.id, payload);
@@ -122,14 +132,34 @@ export default function ShareHoldingsEditor({ profileId, funds, onSaved }) {
         )}
       </div>
       {r.is_selected && (
-        <div className="flex items-center gap-3 mt-1.5 pl-8">
-          <span className="text-[10px] text-muted-foreground">
-            @ {r.share_price ? `$${Number(r.share_price).toFixed(4)}` : 'price pending'}
-          </span>
-          <span className="text-[10px] font-semibold text-foreground ml-auto">
-            {formatCurrency(valueOf(r))}
-          </span>
-        </div>
+        <>
+          <div className="flex items-center gap-3 mt-1.5 pl-8">
+            <span className="text-[10px] text-muted-foreground">
+              @ {r.share_price ? `$${Number(r.share_price).toFixed(4)}` : 'price pending'}
+            </span>
+            <span className="text-[10px] font-semibold text-foreground ml-auto">
+              {formatCurrency(valueOf(r))}
+              {fundsTotal > 0 && (
+                <span className="font-normal text-muted-foreground"> · {(valueOf(r) / fundsTotal * 100).toFixed(1)}% mix</span>
+              )}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 mt-1 pl-8">
+            <span className="text-[10px] text-muted-foreground">New contributions</span>
+            <Input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              max="100"
+              step="0.1"
+              value={r.contribution_percent}
+              onChange={e => setContribPct(r.fund_name, e.target.value)}
+              className="h-6 w-16 text-[10px] text-right px-1.5"
+              placeholder="0"
+            />
+            <span className="text-[10px] text-muted-foreground">%</span>
+          </div>
+        </>
       )}
     </div>
   );
@@ -139,8 +169,9 @@ export default function ShareHoldingsEditor({ profileId, funds, onSaved }) {
       <div className="p-3 border-b border-border">
         <span className="text-xs font-semibold">My Share Holdings</span>
         <p className="text-[10px] text-muted-foreground mt-0.5">
-          Enter the share count for each fund from your TSP.gov statement. Your balance is
-          calculated as shares × the published share price.
+          Enter each fund's share count from TSP.gov (shown there as "Units"). Your balance is
+          shares × the published share price. "New contributions %" is TSP's "Future Investment"
+          setting — where new money goes, which is separate from your current mix.
         </p>
       </div>
 
@@ -176,6 +207,12 @@ export default function ShareHoldingsEditor({ profileId, funds, onSaved }) {
       </div>
 
       <div className="p-3 border-t border-border space-y-2">
+        {contribTotal > 0 && Math.abs(contribTotal - 100) > 0.01 && (
+          <div className="text-[10px] text-amber-500 bg-amber-500/10 rounded-lg px-3 py-2">
+            New-contribution percentages total {contribTotal.toFixed(1)}%, not 100%. They'll be
+            scaled proportionally, but check them against TSP.gov → Future Investment.
+          </div>
+        )}
         {savedMsg && (
           <div className="flex items-center gap-1.5 text-[10px] text-gain bg-gain/10 rounded-lg px-3 py-2">
             <CheckCircle className="w-3 h-3 flex-shrink-0" />

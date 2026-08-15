@@ -263,6 +263,14 @@ Deno.serve(async (req) => {
         const allocPctSum = selectedFunds.reduce((s, f) => s + (f.allocation_percent || 0), 0);
         const allocScale = allocPctSum > 0 ? 100 / allocPctSum : 0;
 
+        // Where NEW money goes ("Future Investment" on TSP.gov) is a separate
+        // setting from the current mix, and the two routinely differ — e.g.
+        // holding C 5%/S 5%/I 75% while contributing C 20%/S 20%/I 60%. Split
+        // contributions by contribution_percent, falling back to the current mix
+        // only when no contribution allocation has been set.
+        const contribPctSum = selectedFunds.reduce((s, f) => s + (f.contribution_percent || 0), 0);
+        const useContribPct = contribPctSum > 0;
+
         let newTotalBalance = 0;
 
         for (const fund of selectedFunds) {
@@ -285,11 +293,13 @@ Deno.serve(async (req) => {
             // like the real account, instead of being forced back to target
             // weights every night.
             if (contributionAmount > 0 && newPrice > 0) {
-              const fundShare = allocPctSum > 0
-                ? (fund.allocation_percent || 0) / allocPctSum
-                : (fundsCurrentTotal > 0
-                    ? (fund.balance || fund.dollar_balance || 0) / fundsCurrentTotal
-                    : 1 / selectedFunds.length);
+              const fundShare = useContribPct
+                ? (fund.contribution_percent || 0) / contribPctSum
+                : (allocPctSum > 0
+                    ? (fund.allocation_percent || 0) / allocPctSum
+                    : (fundsCurrentTotal > 0
+                        ? (fund.balance || fund.dollar_balance || 0) / fundsCurrentTotal
+                        : 1 / selectedFunds.length));
               // Contributions and loan repayments buy shares at today's price.
               newShares += (contributionAmount * fundShare) / newPrice;
             }
