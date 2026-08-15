@@ -1,7 +1,8 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, LogOut } from 'lucide-react';
 import TSPWordmark from '@/components/branding/TSPWordmark';
+import { useAuth } from '@/lib/AuthContext';
 
 // Root pages — show logo. Sub-pages — show back button.
 const ROOT_PATHS = ['/', '/funds', '/retirement', '/analytics', '/ai-coach', '/settings'];
@@ -13,6 +14,7 @@ const PAGE_TITLES = {
 export default function NavigationHeader({ notificationBell }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const isRoot = ROOT_PATHS.includes(location.pathname);
   const pageTitle = PAGE_TITLES[location.pathname] || '';
@@ -45,9 +47,17 @@ export default function NavigationHeader({ notificationBell }) {
         )}
       </div>
 
-      {/* Right: notification bell only */}
-      <div className="flex items-center gap-2 flex-shrink-0">
+      {/* Right: notification bell + sign out */}
+      <div className="flex items-center gap-1 flex-shrink-0">
         {notificationBell}
+        <button
+          onClick={logout}
+          className="flex items-center justify-center w-11 h-11 text-muted-foreground hover:text-destructive transition-colors"
+          aria-label="Sign out"
+          title="Sign out"
+        >
+          <LogOut className="w-5 h-5" />
+        </button>
       </div>
     </header>
   );

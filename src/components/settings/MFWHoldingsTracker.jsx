@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RefreshCw, X, Plus, CheckCircle2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/tspFunds';
+import { rebalanceFundAllocations } from '@/lib/rebalanceFunds';
 
 async function fetchTickerQuote(ticker) {
   // Yahoo Finance has no CORS headers, so the lookup runs through a backend function.
@@ -145,6 +146,7 @@ export default function MFWHoldingsTracker({ profile, onSaved }) {
       has_mfw: true,
       mfw_last_updated: today,
     });
+    await rebalanceFundAllocations(profile.id, (profile?.total_balance_manual || 0) - mfwTotal);
     await refreshProfiles();
     setSaving(false);
     setSaved(true);

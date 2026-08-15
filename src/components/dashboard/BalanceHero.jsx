@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 import YTDBadge from '@/components/dashboard/YTDBadge';
 import { useProfile } from '@/context/ProfileContext';
+import { rebalanceFundAllocations } from '@/lib/rebalanceFunds';
 
 function LastUpdateLabel({ profile }) {
   const lastConfirmed = profile?.balance_last_confirmed;
@@ -61,6 +62,7 @@ export default function BalanceHero({ totalBalance, dailyChange, dailyChangePerc
         total_balance_manual: raw,
         balance_last_confirmed: new Date().toISOString().split('T')[0],
       });
+      await rebalanceFundAllocations(activeProfile.id, raw - (activeProfile?.mfw_balance || 0));
       await refreshProfiles();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);

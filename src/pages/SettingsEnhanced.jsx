@@ -41,8 +41,7 @@ export default function SettingsEnhanced() {
   const handleDeleteAccount = async () => {
     setDeleting(true);
     await resetAccount();
-    base44.auth.logout();
-    window.location.href = '/';
+    await base44.auth.logout();
   };
 
   // Show setup form if not set up yet
@@ -82,7 +81,7 @@ export default function SettingsEnhanced() {
         <Button
           variant="outline"
           className="w-full min-h-[44px] border-destructive/30 text-destructive hover:bg-destructive/10"
-          onClick={() => { base44.auth.logout(); window.location.href = '/'; }}
+          onClick={() => base44.auth.logout()}
         >
           <LogOut className="w-4 h-4 mr-2" />
           Sign Out

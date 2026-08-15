@@ -45,15 +45,17 @@ export const AuthProvider = ({ children }) => {
     return () => subscription.unsubscribe();
   }, [checkUserAuth]);
 
-  const logout = () => {
-    base44.auth.logout();
+  // Await the sign-out so the persisted session is fully cleared before the
+  // page reloads — otherwise the reload can pick the old session back up.
+  const logout = async () => {
+    await base44.auth.logout(false);
     setUser(null);
     setIsAuthenticated(false);
     window.location.href = '/';
   };
 
-  const navigateToLogin = () => {
-    base44.auth.logout(false);
+  const navigateToLogin = async () => {
+    await base44.auth.logout(false);
     setUser(null);
     setIsAuthenticated(false);
     window.location.href = '/';

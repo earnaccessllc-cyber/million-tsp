@@ -30,6 +30,14 @@ export default function FundAllocationEditor({ profileId, funds, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState('');
 
+  // Editable MFW percent — initialized from the current MFW balance vs. total balance,
+  // but the user can type a new percent here to resize their MFW allocation.
+  const [mfwPercentInput, setMfwPercentInput] = useState(() => {
+    const bal = activeProfile?.has_mfw ? (activeProfile?.mfw_balance || 0) : 0;
+    const tot = activeProfile?.total_balance_manual || 0;
+    return bal > 0 && tot > 0 ? ((bal / tot) * 100).toFixed(1) : '';
+  });
+
   const [allocations, setAllocations] = useState(() =>
     ALL_FUNDS.map(f => {
       const existing = funds.find(a => a.fund_name === f.name);
@@ -71,8 +79,9 @@ export default function FundAllocationEditor({ profileId, funds, onSaved }) {
   const mfwBal = activeProfile?.has_mfw && activeProfile?.mfw_balance > 0 ? (activeProfile.mfw_balance || 0) : 0;
   const totalManualForPct = activeProfile?.total_balance_manual || 0;
   const nonMfwTotal = Math.max(0, totalManualForPct - mfwBal);
-  const mfwPct = mfwBal > 0 && totalManualForPct > 0 ? (mfwBal / totalManualForPct) * 100 : 0;
-  const totalPct = allocations.filter(a => a.is_selected).reduce((s, a) => s + (parseFloat(a.allocation_percent) || 0), 0) + mfwPct;
+  const mfwActive = activeProfile?.has_mfw && (mfwBal > 0 || parseFloat(mfwPercentInput) > 0);
+  const mfwPctDisplay = parseFloat(mfwPercentInput) || 0;
+  const totalPct = allocations.filter(a => a.is_selected).reduce((s, a) => s + (parseFloat(a.allocation_percent) || 0), 0) + mfwPctDisplay;
 
   const toggle = (fund_name) => {
     setAllocations(prev => prev.map(a =>
@@ -119,9 +128,32 @@ export default function FundAllocationEditor({ profileId, funds, onSaved }) {
       });
     });
 
-    const mfwBal = activeProfile?.has_mfw ? (activeProfile?.mfw_balance || 0) : 0;
     const totalManual = activeProfile?.total_balance_manual || 0;
-    const nonMfwTotal = Math.max(0, totalManual - mfwBal);
+    const oldMfwBal = activeProfile?.has_mfw ? (activeProfile?.mfw_balance || 0) : 0;
+    const mfwActiveNow = activeProfile?.has_mfw && (oldMfwBal > 0 || parseFloat(mfwPercentInput) > 0);
+    const newMfwBal = mfwActiveNow ? Math.max(0, ((parseFloat(mfwPercentInput) || 0) / 100) * totalManual) : 0;
+
+    // If the MFW percent was changed here, scale the underlying holdings (from Settings →
+    // MFW Holdings) proportionally so their dollar totals stay consistent with this percent.
+    if (mfwActiveNow && Math.abs(newMfwBal - oldMfwBal) > 0.01) {
+      const holdings = Array.isArray(activeProfile?.mfw_holdings) ? activeProfile.mfw_holdings : [];
+      const scale = oldMfwBal > 0 ? newMfwBal / oldMfwBal : 0;
+      const scaledHoldings = holdings.map(h => {
+        const price = h.last_price || 0;
+        if (h.entry_mode === 'dollar') {
+          const newDollar = (parseFloat(h.dollar_value) || 0) * scale;
+          return { ...h, dollar_value: newDollar, shares: price > 0 ? newDollar / price : h.shares };
+        }
+        const newShares = (parseFloat(h.shares) || 0) * scale;
+        return { ...h, shares: newShares, dollar_value: price > 0 ? price * newShares : h.dollar_value };
+      });
+      await base44.entities.TSPProfile.update(activeProfile.id, {
+        mfw_holdings: scaledHoldings,
+        mfw_balance: newMfwBal,
+      });
+    }
+
+    const nonMfwTotal = Math.max(0, totalManual - newMfwBal);
 
     // Step 1: Fetch current closing prices from Google Sheet
     let livePrices = {};
@@ -192,7 +224,7 @@ export default function FundAllocationEditor({ profileId, funds, onSaved }) {
     queryClient.invalidateQueries({ queryKey: fundKey });
 
     // Step 3: Verify — re-add MFW for total display, and actually apply it as the current balance
-    const grandTotal = verifiedTotal + mfwBal;
+    const grandTotal = verifiedTotal + newMfwBal;
     const diff = Math.abs(grandTotal - totalManual);
     if (verifiedTotal > 0) {
       await base44.entities.TSPProfile.update(activeProfile.id, {
@@ -241,8 +273,9 @@ export default function FundAllocationEditor({ profileId, funds, onSaved }) {
         ))}
       </div>
 
-      {/* MFW Row — shown when MFW is active */}
-      {activeProfile?.has_mfw && mfwBal > 0 && (
+      {/* MFW Row — shown when MFW is active. Percent is editable here and drives the
+          underlying holdings in Settings → MFW Holdings once saved. */}
+      {mfwActive && (
         <div className="divide-y divide-border border-t border-border">
           <div className="px-3 py-1.5 bg-secondary/30">
             <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Mutual Fund Window</span>
@@ -252,16 +285,28 @@ export default function FundAllocationEditor({ profileId, funds, onSaved }) {
               <div className="w-4 h-4 flex-shrink-0" /> {/* spacer for checkbox column */}
               <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#C9A832' }} />
               <span className="text-xs font-medium flex-1">MFW (Mutual Fund Window)</span>
-              <span className="text-xs font-semibold text-primary">{mfwPct.toFixed(1)}%</span>
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={mfwPercentInput}
+                  onChange={e => setMfwPercentInput(e.target.value)}
+                  className="h-7 w-16 text-xs text-right px-2"
+                  placeholder=""
+                />
+                <span className="text-xs text-muted-foreground">%</span>
+              </div>
             </div>
             <div className="flex items-center gap-4 mt-1.5 pl-8">
               <div className="flex items-center gap-1">
-                <span className="text-[10px] text-muted-foreground">Balance:</span>
+                <span className="text-[10px] text-muted-foreground">≈</span>
                 <span className="text-[10px] font-semibold text-foreground">
-                  ${mfwBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${(((parseFloat(mfwPercentInput) || 0) / 100) * totalManualForPct).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
-              <span className="text-[10px] text-muted-foreground ml-auto">Managed in Settings → Balance</span>
+              <span className="text-[10px] text-muted-foreground ml-auto">Ticker(s) managed in Settings → Balance</span>
             </div>
           </div>
         </div>
