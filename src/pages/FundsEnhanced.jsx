@@ -10,6 +10,7 @@ import PortfolioHistoryPanel from '@/components/funds/PortfolioHistoryPanel';
 import FundHistoryChart from '@/components/funds/FundHistoryChart';
 import FundSelector from '@/components/funds/FundSelector';
 import FundAllocationEditor from '@/components/funds/FundAllocationEditor';
+import ShareHoldingsEditor from '@/components/funds/ShareHoldingsEditor';
 import OnboardingPrompt from '@/components/onboarding/OnboardingPrompt';
 import PullToRefresh from '@/components/common/PullToRefresh';
 import { useToast } from '@/components/ui/use-toast';
@@ -186,14 +187,23 @@ export default function FundsEnhanced() {
         </div>
       )}
 
-      {/* Allocations tab */}
+      {/* Allocations tab — share-based profiles edit share counts directly,
+          everyone else edits target percentages / dollar amounts. */}
       {activeTab === 'allocations' && (
         <div className="flex-1 overflow-y-auto pb-8 px-4 pt-4">
-          <FundAllocationEditor
-            profileId={activeProfile.id}
-            funds={myFunds}
-            onSaved={() => base44.entities.FundAllocation.filter({ profile_id: activeProfile.id }).then(setMyFunds)}
-          />
+          {activeProfile.entry_method === 'shares' ? (
+            <ShareHoldingsEditor
+              profileId={activeProfile.id}
+              funds={myFunds}
+              onSaved={() => base44.entities.FundAllocation.filter({ profile_id: activeProfile.id }).then(setMyFunds)}
+            />
+          ) : (
+            <FundAllocationEditor
+              profileId={activeProfile.id}
+              funds={myFunds}
+              onSaved={() => base44.entities.FundAllocation.filter({ profile_id: activeProfile.id }).then(setMyFunds)}
+            />
+          )}
         </div>
       )}
     </div>

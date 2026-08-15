@@ -276,8 +276,25 @@ Deno.serve(async (req) => {
           const ytdReturn = jan1Price > 0 ? ((newPrice - jan1Price) / jan1Price) * 100 : 0;
 
           let newBalance;
+          let newShares = fund.shares || 0;
 
-          if (profile.entry_method === 'dollar') {
+          if (profile.entry_method === 'shares') {
+            // Share-based: mirrors how TSP actually works. The share count is the
+            // source of truth and only changes when money moves; today's price
+            // does the rest. Allocations drift naturally as funds diverge, exactly
+            // like the real account, instead of being forced back to target
+            // weights every night.
+            if (contributionAmount > 0 && newPrice > 0) {
+              const fundShare = allocPctSum > 0
+                ? (fund.allocation_percent || 0) / allocPctSum
+                : (fundsCurrentTotal > 0
+                    ? (fund.balance || fund.dollar_balance || 0) / fundsCurrentTotal
+                    : 1 / selectedFunds.length);
+              // Contributions and loan repayments buy shares at today's price.
+              newShares += (contributionAmount * fundShare) / newPrice;
+            }
+            newBalance = newShares * newPrice;
+          } else if (profile.entry_method === 'dollar') {
             const currentBal = fund.dollar_balance || fund.balance || 0;
             newBalance = currentBal > 0 ? currentBal * (1 + dailyReturn / 100) : currentBal;
           } else {
@@ -294,12 +311,21 @@ Deno.serve(async (req) => {
           // Buy into this fund with today's contribution, split by allocation %
           // (falling back to current-balance weighting when allocation % isn't
           // meaningful — dollar-entry profiles, or a 0%-allocated selected fund).
-          if (contributionAmount > 0) {
+          // Share-based profiles already bought shares with it above, so skip.
+          if (contributionAmount > 0 && profile.entry_method !== 'shares') {
             const allocPct = ((fund.allocation_percent || 0) * allocScale) / 100;
             const fundShare = allocPct > 0
               ? allocPct
               : (fundsCurrentTotal > 0 ? (fund.balance || fund.dollar_balance || 0) / fundsCurrentTotal : 1 / selectedFunds.length);
             newBalance += contributionAmount * fundShare;
+          }
+
+          // Keep the share count in step with the balance. Under 'shares' it was
+          // computed above and is the source of truth; under the other methods
+          // it's back-calculated so the displayed share count doesn't go stale
+          // (previously it was only ever refreshed by saving the Funds screen).
+          if (profile.entry_method !== 'shares') {
+            newShares = newPrice > 0 ? newBalance / newPrice : newShares;
           }
 
           newTotalBalance += newBalance;
@@ -310,6 +336,7 @@ Deno.serve(async (req) => {
             jan1_share_price: jan1Price,
             balance: newBalance,
             dollar_balance: newBalance,
+            shares: newShares,
             return_percent: ytdReturn,
             daily_return_percent: dailyReturn,
             wtd_return_percent: data.wtd_return_percent ?? fund.wtd_return_percent ?? 0,
