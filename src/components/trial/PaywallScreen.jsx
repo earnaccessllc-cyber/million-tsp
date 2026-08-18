@@ -1,6 +1,7 @@
 import React from 'react';
-import { CheckCircle, Zap, Shield, Target, TrendingUp, Calendar, Clock } from 'lucide-react';
+import { CheckCircle, Zap, Shield, Target, TrendingUp, Calendar, Clock, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useCheckout } from '@/hooks/useCheckout';
 
 const PRO_FEATURES = [
   { icon: Calendar, text: 'Retirement countdown & eligibility' },
@@ -12,6 +13,8 @@ const PRO_FEATURES = [
 ];
 
 export default function PaywallScreen({ onContinueFree }) {
+  const { startCheckout, loading, error } = useCheckout();
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -84,7 +87,9 @@ export default function PaywallScreen({ onContinueFree }) {
 
         {/* CTA */}
         <button
-          className="w-full py-4 rounded-xl font-bold text-base tracking-wide mb-3"
+          onClick={startCheckout}
+          disabled={loading}
+          className="w-full py-4 rounded-xl font-bold text-base tracking-wide mb-3 flex items-center justify-center gap-2 disabled:opacity-70"
           style={{
             background: 'linear-gradient(135deg, #FFD700 0%, #C9A832 100%)',
             color: '#000',
@@ -93,8 +98,10 @@ export default function PaywallScreen({ onContinueFree }) {
             fontSize: 16,
           }}
         >
-          Get Lifetime Access — $14.99
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          {loading ? 'Starting checkout…' : 'Get Lifetime Access — $14.99'}
         </button>
+        {error && <p className="text-center text-xs mb-3" style={{ color: '#f87171' }}>{error}</p>}
 
         {/* Continue free */}
         <button

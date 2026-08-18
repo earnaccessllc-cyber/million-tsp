@@ -1,3 +1,6 @@
+import { useProfile } from '@/context/ProfileContext';
+import { hasFullAccess } from '@/lib/trialUtils';
+
 // Pro features list — used across the app for gating
 export const PRO_FEATURES = [
   'ai_coach',
@@ -12,10 +15,10 @@ export const PRO_FEATURES = [
   'smart_rebalancing',
 ];
 
-// For now, all users are on the free tier. 
-// To unlock Pro, set isPro = true (can be tied to a payment system later).
+// Pro is unlocked for a paid plan or an active (unexpired) trial — same rule
+// PaywallScreen already uses to decide whether to show itself.
 export function useProStatus() {
-  // TODO: tie to payments / user role
-  const isPro = true;
+  const { activeProfile } = useProfile();
+  const isPro = hasFullAccess(activeProfile);
   return { isPro };
 }
