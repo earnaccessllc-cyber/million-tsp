@@ -93,9 +93,13 @@ export default function MFWHoldingsTracker({ profile, onSaved }) {
     setHoldings(prev => prev.map((r, i) => i === idx ? { ...r, entry_mode: mode } : r));
   };
 
+  // Once a price is known, value always tracks shares × latest price — even for
+  // dollar-entry holdings, where the typed amount only sets the initial share
+  // count. Otherwise a dollar-mode holding's value would freeze forever at
+  // whatever was typed, never moving with the fund's actual price changes.
   const rowValue = (h) => {
-    if (h.entry_mode === 'dollar') return parseFloat(h.dollar_value) || 0;
-    return (h.last_price || 0) * (parseFloat(h.shares) || 0);
+    if (h.last_price > 0 && parseFloat(h.shares) > 0) return h.last_price * parseFloat(h.shares);
+    return parseFloat(h.dollar_value) || 0;
   };
 
   const removeRow = (idx) => {
