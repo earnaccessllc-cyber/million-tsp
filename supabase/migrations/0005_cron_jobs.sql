@@ -1,0 +1,47 @@
+-- Documents the three pg_cron jobs driving the app's nightly/scheduled work.
+-- Applied directly via mcp__Supabase__execute_sql / cron.alter_job (not
+-- through this file) since they invoke Edge Functions by URL rather than
+-- touching schema; this file exists so anyone rebuilding from scratch has
+-- the exact commands, including the timeout fix below.
+--
+-- IMPORTANT: net.http_post defaults to a 5-second timeout_milliseconds. The
+-- Edge Functions these jobs call (dailyPriceUpdate especially — fetches an
+-- external Google Sheet, then loops through every profile's funds) routinely
+-- take longer than 5s, so the default caused pg_net to give up waiting and
+-- log a timeout — sporadically leaving the night's price/balance update
+-- incomplete or unrecorded even though the function kept running server-side.
+-- All three jobs must pass a generous timeout_milliseconds (60000) to avoid
+-- this. Do not omit it when recreating or editing these jobs.
+
+-- select cron.schedule(
+--   'daily-price-update', '0 1 * * *', $$
+--   select net.http_post(
+--     url := 'https://<project-ref>.supabase.co/functions/v1/dailyPriceUpdate',
+--     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
+--     body := '{}'::jsonb,
+--     timeout_milliseconds := 60000
+--   );
+--   $$
+-- );
+
+-- select cron.schedule(
+--   'mfw-price-update', '0 12 * * *', $$
+--   select net.http_post(
+--     url := 'https://<project-ref>.supabase.co/functions/v1/mfwPriceUpdate',
+--     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
+--     body := '{}'::jsonb,
+--     timeout_milliseconds := 60000
+--   );
+--   $$
+-- );
+
+-- select cron.schedule(
+--   'nightly-email-job', '*/15 * * * *', $$
+--   select net.http_post(
+--     url := 'https://<project-ref>.supabase.co/functions/v1/nightlyEmailJob',
+--     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
+--     body := '{}'::jsonb,
+--     timeout_milliseconds := 60000
+--   );
+--   $$
+-- );
