@@ -1,4 +1,4 @@
--- Documents the three pg_cron jobs driving the app's nightly/scheduled work.
+-- Documents the four pg_cron jobs driving the app's nightly/scheduled work.
 -- Applied directly via mcp__Supabase__execute_sql / cron.alter_job (not
 -- through this file) since they invoke Edge Functions by URL rather than
 -- touching schema; this file exists so anyone rebuilding from scratch has
@@ -17,6 +17,21 @@
 --   'daily-price-update', '0 1 * * *', $$
 --   select net.http_post(
 --     url := 'https://<project-ref>.supabase.co/functions/v1/dailyPriceUpdate',
+--     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
+--     body := '{}'::jsonb,
+--     timeout_milliseconds := 60000
+--   );
+--   $$
+-- );
+
+-- mfwPriceUpdate runs twice — once early (6am ET) and again at the
+-- originally-programmed time (8am ET) — since mutual fund NAVs can settle at
+-- different points overnight; running it twice catches a price that wasn't
+-- posted yet at the first check.
+-- select cron.schedule(
+--   'mfw-price-update-early', '0 10 * * *', $$
+--   select net.http_post(
+--     url := 'https://<project-ref>.supabase.co/functions/v1/mfwPriceUpdate',
 --     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
 --     body := '{}'::jsonb,
 --     timeout_milliseconds := 60000
