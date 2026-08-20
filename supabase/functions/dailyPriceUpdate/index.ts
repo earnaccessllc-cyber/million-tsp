@@ -237,7 +237,6 @@ Deno.serve(async (req) => {
 
         const mfwBal = profile.has_mfw && profile.mfw_balance ? profile.mfw_balance : 0;
         const totalManual = profile.total_balance_manual || 0;
-        const nonMfwTotal = Math.max(0, totalManual - mfwBal);
 
         const todayIsPayDay = isPayDay(etNow, profile.pay_schedule || 'biweekly', profile.pay_date_anchor);
         const loanResult = todayIsPayDay ? calcLoanRepayments(profile) : { total: 0, updatedLoans: profile.loans };
@@ -248,6 +247,14 @@ Deno.serve(async (req) => {
         // when allocation_percent isn't set (dollar-entry profiles, or a selected
         // fund sitting at 0%) — split by current balance share instead.
         const fundsCurrentTotal = selectedFunds.reduce((s, f) => s + (f.balance || f.dollar_balance || 0), 0);
+
+        // allocation_percent is only ever used to decide where NEW contribution
+        // money goes on a pay day — never to redistribute the existing balance.
+        // Normalize in case percentages don't sum to 100 (e.g. 74/5/5), so a
+        // pay-day contribution still lands fully invested instead of partly
+        // discarded.
+        const allocPctSum = selectedFunds.reduce((s, f) => s + (f.allocation_percent || 0), 0);
+        const allocScale = allocPctSum > 0 ? 100 / allocPctSum : 0;
 
         let newTotalBalance = 0;
 
@@ -261,27 +268,22 @@ Deno.serve(async (req) => {
           const jan1Price = (fund.jan1_share_price && fund.jan1_share_price > 0) ? fund.jan1_share_price : (JAN1_PRICES[fund.fund_name] || newPrice);
           const ytdReturn = jan1Price > 0 ? ((newPrice - jan1Price) / jan1Price) * 100 : 0;
 
-          let newBalance;
-
-          if (profile.entry_method === 'dollar') {
-            const currentBal = fund.dollar_balance || fund.balance || 0;
-            newBalance = currentBal > 0 ? currentBal * (1 + dailyReturn / 100) : currentBal;
-          } else {
-            const allocPct = (fund.allocation_percent || 0) / 100;
-            if (nonMfwTotal > 0 && allocPct > 0) {
-              const baseBalance = nonMfwTotal * allocPct;
-              newBalance = dailyReturn !== 0 ? baseBalance * (1 + dailyReturn / 100) : baseBalance;
-            } else {
-              const currentBal = fund.balance || fund.dollar_balance || 0;
-              newBalance = currentBal > 0 && dailyReturn !== 0 ? currentBal * (1 + dailyReturn / 100) : currentBal;
-            }
-          }
+          // Each fund grows from its OWN previous balance by its OWN daily
+          // return — exactly like a real TSP account, which tracks units per
+          // fund that only move with that fund's price. It must never be
+          // reset to allocation% x total on every run: that silently forces
+          // the whole account back to the stated percentages every night,
+          // discarding any real drift between funds (confirmed against a real
+          // TSP statement — two funds sharing an allocation% had been driven
+          // to an identical dollar balance, which real accounts never do).
+          const currentBal = fund.balance || fund.dollar_balance || 0;
+          let newBalance = currentBal > 0 ? currentBal * (1 + dailyReturn / 100) : currentBal;
 
           // Buy into this fund with today's contribution, split by allocation %
           // (falling back to current-balance weighting when allocation % isn't
           // meaningful — dollar-entry profiles, or a 0%-allocated selected fund).
           if (contributionAmount > 0) {
-            const allocPct = (fund.allocation_percent || 0) / 100;
+            const allocPct = ((fund.allocation_percent || 0) * allocScale) / 100;
             const fundShare = allocPct > 0
               ? allocPct
               : (fundsCurrentTotal > 0 ? (fund.balance || fund.dollar_balance || 0) / fundsCurrentTotal : 1 / selectedFunds.length);
@@ -305,6 +307,21 @@ Deno.serve(async (req) => {
         }
 
         newTotalBalance += mfwBal;
+
+        // Safety net: a single day's market move can't plausibly erase a third of
+        // the balance. If the newly derived total is wildly below the stored one,
+        // treat it as a computation fault rather than a real move — bail before
+        // writing it anywhere, so a bad derivation can't destroy the balance or
+        // the history, and can't compound the next night by feeding off its own
+        // bad output.
+        if (totalManual > 0 && newTotalBalance < totalManual * 0.67) {
+          results.push({
+            profile_id: profile.id,
+            skipped: true,
+            reason: `Refused implausible balance drop: ${totalManual} -> ${newTotalBalance}`,
+          });
+          continue;
+        }
 
         const yesterday = new Date(etNow);
         yesterday.setDate(yesterday.getDate() - 1);
