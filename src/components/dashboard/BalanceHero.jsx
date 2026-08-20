@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import YTDBadge from '@/components/dashboard/YTDBadge';
 import { useProfile } from '@/context/ProfileContext';
 import { rebalanceFundAllocations } from '@/lib/rebalanceFunds';
+import { calcYTD } from '@/lib/contributionCalc';
 
 function LastUpdateLabel({ profile }) {
   const lastConfirmed = profile?.balance_last_confirmed;
@@ -105,14 +106,25 @@ export default function BalanceHero({ totalBalance, dailyChange, dailyChangePerc
 
   const opening = profile?.opening_balance || openingBalance || 0;
   const displayBalance = parseFloat(String(inputVal).replace(/,/g, '')) || totalBalance || 0;
-  const accountYTD = opening > 0 ? ((displayBalance - opening) / opening) * 100 : null;
+
+  // TSP.gov's own YTD % is investment performance only — it excludes new money
+  // added to the account this year (contributions, agency match, loan
+  // repayments), so it doesn't inflate just because you're still funding the
+  // account. Matching that here: strip this year's contributions out of the
+  // raw balance growth before computing the percentage, same residual
+  // ("gainLoss") approach YTD Activity already uses.
+  const ytd = calcYTD(profile);
+  const contributionsYTD = ytd.tradYTD + ytd.rothYTD + ytd.matchYTD + ytd.auto1YTD + ytd.loanYTD;
+  const investmentGainYTD = displayBalance - opening - contributionsYTD;
+  const accountYTD = opening > 0 ? (investmentGainYTD / opening) * 100 : null;
 
   const openingExclLoan = profile?.opening_balance_excl_loan;
   // Derived from the real loans array, not the legacy standalone loan_repayments
   // field — that one isn't kept in sync and can drift from actual loan edits.
   const hasLoan = !!((Array.isArray(profile?.loans) && profile.loans.length > 0) && openingExclLoan);
+  const investmentGainExclLoan = displayBalance - openingExclLoan - contributionsYTD;
   const accountYTDExclLoan = hasLoan && openingExclLoan > 0
-    ? ((displayBalance - openingExclLoan) / openingExclLoan) * 100
+    ? (investmentGainExclLoan / openingExclLoan) * 100
     : null;
 
   return (
