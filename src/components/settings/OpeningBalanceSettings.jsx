@@ -4,8 +4,7 @@ import { useProfile } from '@/context/ProfileContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CalendarDays, RefreshCw, CheckCircle2, ExternalLink, History } from 'lucide-react';
-import { calcOpeningBalance } from '@/functions/calcOpeningBalance';
+import { CalendarDays, CheckCircle2, ExternalLink, History } from 'lucide-react';
 
 const currentYear = new Date().getFullYear();
 
@@ -17,23 +16,14 @@ function fmt(n) {
 export default function OpeningBalanceSettings() {
   const { activeProfile, refreshProfiles } = useProfile();
   const [openingBal, setOpeningBal] = useState(activeProfile?.opening_balance ?? '');
-  const [openingBalExclLoan, setOpeningBalExclLoan] = useState(activeProfile?.opening_balance_excl_loan ?? '');
   const [employmentType, setEmploymentType] = useState(activeProfile?.employment_type ?? 'civilian');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [autoCalcing, setAutoCalcing] = useState(false);
-  const [autoCalcMsg, setAutoCalcMsg] = useState(null);
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  // Derived from the real loans array, not the legacy standalone loan_repayments
-  // field — that one isn't kept in sync and had drifted to 0, hiding this
-  // section even though real active loans existed.
-  const hasLoan = Array.isArray(activeProfile?.loans) && activeProfile.loans.length > 0;
-
   useEffect(() => {
     setOpeningBal(activeProfile?.opening_balance ?? '');
-    setOpeningBalExclLoan(activeProfile?.opening_balance_excl_loan ?? '');
     setEmploymentType(activeProfile?.employment_type ?? 'civilian');
   }, [activeProfile?.id]);
 
@@ -47,29 +37,12 @@ export default function OpeningBalanceSettings() {
       });
   }, [activeProfile?.id, saved]);
 
-  const handleAutoCalc = async () => {
-    if (!activeProfile?.id) return;
-    setAutoCalcing(true);
-    setAutoCalcMsg(null);
-    const res = await calcOpeningBalance({ profile_id: activeProfile.id });
-    if (res.data?.success && res.data?.opening_balance > 0) {
-      const bal = res.data.opening_balance;
-      setOpeningBal(bal.toFixed(2));
-      setAutoCalcMsg(`✅ Auto-calculated: $${bal.toLocaleString('en-US', { maximumFractionDigits: 2 })} (from TSP.gov — Jan 1, ${currentYear} share prices)`);
-      refreshProfiles();
-    } else {
-      setAutoCalcMsg('⚠️ Could not auto-calculate. Enter your opening balance manually above.');
-    }
-    setAutoCalcing(false);
-  };
-
   const handleSave = async () => {
     if (!activeProfile?.id) return;
     setSaving(true);
     const updates = { employment_type: employmentType };
     const bal = parseFloat(openingBal) || 0;
     if (openingBal !== '') updates.opening_balance = bal;
-    if (hasLoan && openingBalExclLoan !== '') updates.opening_balance_excl_loan = parseFloat(openingBalExclLoan) || 0;
     await base44.entities.TSPProfile.update(activeProfile.id, updates);
 
     // Upsert into OpeningBalanceHistory
@@ -139,25 +112,6 @@ export default function OpeningBalanceSettings() {
         </div>
       </div>
 
-      {/* Auto-calc button */}
-      <div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full gap-2 border-primary/30 text-primary hover:bg-primary/10"
-          onClick={handleAutoCalc}
-          disabled={autoCalcing}
-        >
-          {autoCalcing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-          {autoCalcing ? 'Fetching from TSP.gov…' : 'Auto-Calculate from TSP.gov'}
-        </Button>
-        {autoCalcMsg && (
-          <p className={`text-[10px] mt-1.5 leading-relaxed ${autoCalcMsg.startsWith('✅') ? 'text-gain' : 'text-muted-foreground'}`}>
-            {autoCalcMsg}
-          </p>
-        )}
-      </div>
-
       {/* Opening Balance input */}
       <div>
         <Label className="text-sm font-semibold text-foreground mb-1.5 block">
@@ -197,28 +151,6 @@ export default function OpeningBalanceSettings() {
           </a>
         </div>
       </div>
-
-      {/* Loan exclusion */}
-      {hasLoan && (
-        <div>
-          <Label className="text-xs text-muted-foreground mb-1.5 block">
-            Opening Balance Excluding Loan (January 1, {currentYear})
-          </Label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-            <Input
-              type="number"
-              value={openingBalExclLoan}
-              onChange={e => setOpeningBalExclLoan(e.target.value)}
-              className="pl-6 h-10 text-sm"
-              placeholder="e.g. 240000"
-            />
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-1">
-            Used to show YTD % excluding the loan balance.
-          </p>
-        </div>
-      )}
 
       <Button onClick={handleSave} disabled={saving} className="w-full gap-2">
         {saved
