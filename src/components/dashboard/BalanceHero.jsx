@@ -108,7 +108,9 @@ export default function BalanceHero({ totalBalance, dailyChange, dailyChangePerc
   const accountYTD = opening > 0 ? ((displayBalance - opening) / opening) * 100 : null;
 
   const openingExclLoan = profile?.opening_balance_excl_loan;
-  const hasLoan = !!(profile?.loan_repayments && profile.loan_repayments > 0 && openingExclLoan);
+  // Derived from the real loans array, not the legacy standalone loan_repayments
+  // field — that one isn't kept in sync and can drift from actual loan edits.
+  const hasLoan = !!((Array.isArray(profile?.loans) && profile.loans.length > 0) && openingExclLoan);
   const accountYTDExclLoan = hasLoan && openingExclLoan > 0
     ? ((displayBalance - openingExclLoan) / openingExclLoan) * 100
     : null;
