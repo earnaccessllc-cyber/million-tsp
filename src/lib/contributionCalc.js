@@ -6,17 +6,36 @@ export const PAY_PERIODS = { biweekly: 26, monthly: 12 };
 export const IRS_LIMIT_2026 = 23500;
 
 /**
- * Returns number of pay periods elapsed since Jan 1 of current year (through today)
+ * Returns number of pay periods elapsed since Jan 1 of current year (through today).
+ * When a real pay_date_anchor is known, counts actual pay dates on that real
+ * biweekly cycle instead of assuming alignment to Jan 1 — agencies' real pay
+ * calendars don't land on a generic Jan-1-based 14-day grid, so the generic
+ * estimate can be off by a full pay period (mirrors dailyPriceUpdate's
+ * anchor-based isPayDay on the backend, which this must stay consistent with).
  */
-export function getPeriodsElapsed(paySchedule = 'biweekly') {
+export function getPeriodsElapsed(paySchedule = 'biweekly', anchorDateStr = null) {
   const now = new Date();
   const jan1 = new Date(now.getFullYear(), 0, 1);
-  const dayOfYear = Math.floor((now - jan1) / (1000 * 60 * 60 * 24));
 
   if (paySchedule === 'monthly') {
     return now.getMonth(); // 0 = Jan (no full period yet), etc.
   }
-  // Biweekly: every 14 days from Jan 1
+
+  if (anchorDateStr) {
+    const anchor = new Date(anchorDateStr + 'T00:00:00');
+    const diffDays = Math.floor((now - anchor) / (1000 * 60 * 60 * 24));
+    const daysSinceMostRecentPayDay = ((diffDays % 14) + 14) % 14;
+    let payDate = new Date(now.getTime() - daysSinceMostRecentPayDay * 24 * 60 * 60 * 1000);
+    let count = 0;
+    while (payDate >= jan1) {
+      count++;
+      payDate = new Date(payDate.getTime() - 14 * 24 * 60 * 60 * 1000);
+    }
+    return count;
+  }
+
+  // Fallback when no real pay date is known yet: generic Jan-1-anchored estimate.
+  const dayOfYear = Math.floor((now - jan1) / (1000 * 60 * 60 * 24));
   return Math.floor(dayOfYear / 14);
 }
 
@@ -102,7 +121,7 @@ export function calcYTD(profile) {
   // touching that dropdown. CSRS never gets agency match/auto 1%, so it always overrides here.
   const agencyType = profile?.retirement_system === 'CSRS' ? 'csrs' : (profile?.agency_type || 'usps');
   const periods = PAY_PERIODS[paySchedule] || 26;
-  const periodsElapsed = getPeriodsElapsed(paySchedule);
+  const periodsElapsed = getPeriodsElapsed(paySchedule, profile?.pay_date_anchor);
 
   const trad = resolveContrib(
     profile?.contrib_traditional_mode || 'percent',
@@ -121,7 +140,11 @@ export function calcYTD(profile) {
   const employeePct = trad.pct + roth.pct;
   const agency = calcAgencyMatch(agencyType, employeePct, salary, paySchedule);
 
-  const loanPerPeriod = profile?.contrib_loan_per_period || 0;
+  // Derived from the real loans array (each loan's own per_period_payment) rather
+  // than the legacy standalone contrib_loan_per_period field, which isn't kept in
+  // sync when loans are added/edited and had drifted from the real total.
+  const loans = Array.isArray(profile?.loans) ? profile.loans : [];
+  const loanPerPeriod = loans.reduce((s, l) => s + (parseFloat(l.per_period_payment) || 0), 0);
 
   const tradYTD = trad.dollar * periodsElapsed;
   const rothYTD = roth.dollar * periodsElapsed;

@@ -26,7 +26,10 @@ export default function OpeningBalanceSettings() {
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  const hasLoan = !!(activeProfile?.loan_repayments && activeProfile.loan_repayments > 0);
+  // Derived from the real loans array, not the legacy standalone loan_repayments
+  // field — that one isn't kept in sync and had drifted to 0, hiding this
+  // section even though real active loans existed.
+  const hasLoan = Array.isArray(activeProfile?.loans) && activeProfile.loans.length > 0;
 
   useEffect(() => {
     setOpeningBal(activeProfile?.opening_balance ?? '');

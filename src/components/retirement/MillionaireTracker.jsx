@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Trophy, TrendingUp, Zap } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { formatCurrency } from '@/lib/tspFunds';
+import { resolveContrib, PAY_PERIODS } from '@/lib/contributionCalc';
 
 function projectToGoal(balance, monthlyContrib, target, annualReturn = 7) {
   const monthlyRate = annualReturn / 100 / 12;
@@ -24,7 +25,15 @@ export default function MillionaireTracker({ profile, tspBalance }) {
 
   const GOAL = profile.balance_goal || 1_000_000;
   const salary = profile.current_annual_salary || 0;
-  const baseMonthlyContrib = ((profile.traditional_contributions || 0) + (profile.roth_contributions || 0)) / 12;
+  // Derived from the same live contribution settings ContributionsSettings/YTD
+  // Activity use, not the standalone traditional_contributions/roth_contributions
+  // fields — those are never kept in sync with the real percent/dollar settings
+  // and had drifted to $0, silently zeroing out this projection.
+  const paySchedule = profile.pay_schedule || 'biweekly';
+  const periodsPerYear = PAY_PERIODS[paySchedule] || 26;
+  const trad = resolveContrib(profile.contrib_traditional_mode || 'percent', profile.contrib_traditional_percent || 0, profile.contrib_traditional_dollar || 0, salary, paySchedule);
+  const roth = resolveContrib(profile.contrib_roth_mode || 'percent', profile.contrib_roth_percent || 0, profile.contrib_roth_dollar || 0, salary, paySchedule);
+  const baseMonthlyContrib = (trad.dollar + roth.dollar) * periodsPerYear / 12;
   const bonusContrib = whatIfMode === 'percent'
     ? (salary * extraPercent / 100) / 12
     : extraDollar;

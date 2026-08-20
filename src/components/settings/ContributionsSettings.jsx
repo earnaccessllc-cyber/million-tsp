@@ -412,8 +412,7 @@ export default function ContributionsSettings() {
 
               {/* YTD Activity */}
               {(() => {
-                const totalLoanPerPeriod = loans.reduce((s, l) => s + (parseFloat(l.per_period_payment) || 0), 0);
-                const ytd = calcYTD({ ...activeProfile, ...local, current_annual_salary: salary, contrib_traditional_percent: tradPct, contrib_traditional_dollar: tradDollar, contrib_roth_percent: rothPct, contrib_roth_dollar: rothDollar, contrib_loan_per_period: totalLoanPerPeriod });
+                const ytd = calcYTD({ ...activeProfile, ...local, current_annual_salary: salary, contrib_traditional_percent: tradPct, contrib_traditional_dollar: tradDollar, contrib_roth_percent: rothPct, contrib_roth_dollar: rothDollar, loans });
                 if (!ytd.periodsElapsed || !salary) return null;
                 const isCSRSForYTD = effectiveAgencyType === 'csrs';
                 const isStandardFERS = effectiveAgencyType === 'standard_fers';

@@ -1,4 +1,5 @@
 import { getMRA, LIFE_EXPECTANCY_FACTORS } from '@/lib/tspFunds';
+import { resolveContrib, calcAgencyMatch, PAY_PERIODS } from '@/lib/contributionCalc';
 
 /**
  * Calculate Social Security Full Retirement Age based on birth year
@@ -159,12 +160,20 @@ export function projectTSPBalance(currentBalance, profile, yearsToRetirement) {
   const annualReturn = (profile?.fixed_annual_return || 7) / 100;
   const monthlyRate = annualReturn / 12;
   const months = Math.round(yearsToRetirement * 12);
-  const monthlyContrib = (
-    (profile?.traditional_contributions || 0) +
-    (profile?.roth_contributions || 0) +
-    (profile?.agency_match || 0) +
-    (profile?.auto_1_percent || 0)
-  ) / 12;
+  // Derived from the same live contribution settings used elsewhere in the app,
+  // not the standalone traditional_contributions/roth_contributions/agency_match/
+  // auto_1_percent fields — those are never kept in sync with the real percent/
+  // dollar settings and had drifted to $0, silently projecting zero future
+  // contributions toward retirement.
+  const salary = profile?.current_annual_salary || 0;
+  const paySchedule = profile?.pay_schedule || 'biweekly';
+  const periodsPerYear = PAY_PERIODS[paySchedule] || 26;
+  const agencyType = profile?.retirement_system === 'CSRS' ? 'csrs' : (profile?.agency_type || 'usps');
+  const trad = resolveContrib(profile?.contrib_traditional_mode || 'percent', profile?.contrib_traditional_percent || 0, profile?.contrib_traditional_dollar || 0, salary, paySchedule);
+  const roth = resolveContrib(profile?.contrib_roth_mode || 'percent', profile?.contrib_roth_percent || 0, profile?.contrib_roth_dollar || 0, salary, paySchedule);
+  const employeePct = trad.pct + roth.pct;
+  const agency = calcAgencyMatch(agencyType, employeePct, salary, paySchedule);
+  const monthlyContrib = (trad.dollar + roth.dollar + agency.matchDollar + (agency.auto1Dollar || 0)) * periodsPerYear / 12;
 
   let bal = currentBalance;
   for (let i = 0; i < months; i++) {
