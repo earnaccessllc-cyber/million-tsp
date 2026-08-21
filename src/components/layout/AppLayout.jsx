@@ -9,6 +9,9 @@ import { useProfile } from '@/context/ProfileContext';
 import TrialBanner from '@/components/trial/TrialBanner';
 import PaywallScreen from '@/components/trial/PaywallScreen';
 import { getTrialStatus } from '@/lib/trialUtils';
+import { RetirementSaveBarProvider, useRetirementSaveBar } from '@/context/RetirementSaveBarContext';
+import { Button } from '@/components/ui/button';
+import { Save, CheckCircle2 } from 'lucide-react';
 
 // Lazy-import all tab pages to avoid circular deps — they're already imported in App.jsx
 import Dashboard from '@/pages/Dashboard';
@@ -63,7 +66,51 @@ function SubPageRoutes() {
   );
 }
 
+// Renders the actual fixed "Save" bar for the Retirement tab, published via
+// RetirementSaveBarContext by RetirementEnhanced. Rendered as a plain sibling
+// of BottomNav (not portaled, not nested inside the animated/momentum-scrolling
+// tab stack) because that's the one structure that's proven to stay reliably
+// fixed on iOS Safari in this app — BottomNav itself never drifts.
+function RetirementSaveBar() {
+  const location = useLocation();
+  const { state } = useRetirementSaveBar();
+  const isRetirementTab = location.pathname === '/retirement' || location.pathname.startsWith('/retirement/');
+  if (!isRetirementTab || !state) return null;
+
+  const { saveStatus, hasPending, onSave } = state;
+  return (
+    <div
+      className="fixed left-0 right-0 z-40 flex justify-center px-4 pointer-events-none"
+      style={{ bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 12px)' }}
+    >
+      <Button
+        size="lg"
+        disabled={saveStatus === 'saving' || saveStatus === 'saved' || !hasPending}
+        onClick={onSave}
+        className="pointer-events-auto w-full max-w-lg gap-2 h-12 text-sm font-bold rounded-xl border-0 disabled:opacity-50"
+        style={{
+          background: 'linear-gradient(135deg, #FFD700 0%, #C9A832 100%)',
+          color: '#000',
+          boxShadow: '0 4px 20px rgba(201,168,50,0.45)',
+        }}
+      >
+        {saveStatus === 'saving' && <><Save className="w-4 h-4 animate-pulse" /> Saving…</>}
+        {saveStatus === 'saved' && <><CheckCircle2 className="w-4 h-4" /> Saved</>}
+        {saveStatus === 'idle' && <><Save className="w-4 h-4" /> {hasPending ? 'Save Changes' : 'Saved'}</>}
+      </Button>
+    </div>
+  );
+}
+
 export default function AppLayout() {
+  return (
+    <RetirementSaveBarProvider>
+      <AppLayoutInner />
+    </RetirementSaveBarProvider>
+  );
+}
+
+function AppLayoutInner() {
   const location = useLocation();
   const navigate = useNavigate();
   const prevTabRef = useRef(getTabIndex(location.pathname));
@@ -151,6 +198,7 @@ export default function AppLayout() {
           {/* Sub-pages render on top */}
           <SubPageRoutes />
         </main>
+        {!isOnboarding && <RetirementSaveBar />}
         {!isOnboarding && <BottomNav getTabPath={(tab) => tabHistoryRef.current[tab] || tab} />}
       </div>
     </NotificationProvider>
