@@ -73,27 +73,11 @@ export default function RetirementEnhanced() {
   };
 
   return (
-    <div className="max-w-lg mx-auto px-4 pt-4 pb-6">
+    <>
+    <div className="max-w-lg mx-auto px-4 pt-4 pb-24">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold">Retirement</h2>
-          <Button
-            size="sm"
-            disabled={saveStatus === 'saving' || saveStatus === 'saved' || Object.keys(pendingUpdates).length === 0}
-            onClick={() => {
-              const toSave = { ...pendingRef.current };
-              if (Object.keys(toSave).length > 0) {
-                setSaveStatus('saving');
-                saveMutation.mutate(toSave);
-              }
-            }}
-            className={`gap-1.5 text-xs h-8 px-3 transition-all ${saveStatus === 'saved' ? 'bg-gain/20 text-gain border-gain/30 hover:bg-gain/20' : ''}`}
-            variant={saveStatus === 'saved' ? 'outline' : Object.keys(pendingUpdates).length > 0 ? 'default' : 'outline'}
-          >
-            {saveStatus === 'saving' && <><Save className="w-3.5 h-3.5 animate-pulse" /> Saving…</>}
-            {saveStatus === 'saved' && <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>}
-            {saveStatus === 'idle' && <><Save className="w-3.5 h-3.5" /> {Object.keys(pendingUpdates).length > 0 ? 'Save' : 'Saved'}</>}
-          </Button>
         </div>
 
         <Tabs defaultValue="million" className="w-full">
@@ -163,5 +147,34 @@ export default function RetirementEnhanced() {
         </Tabs>
       </motion.div>
     </div>
+
+    {/* Floating Save button — sits above the bottom nav, gold so it can't be missed */}
+    <div
+      className="fixed left-0 right-0 z-40 flex justify-center px-4 pointer-events-none"
+      style={{ bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 12px)' }}
+    >
+      <Button
+        size="lg"
+        disabled={saveStatus === 'saving' || saveStatus === 'saved' || Object.keys(pendingUpdates).length === 0}
+        onClick={() => {
+          const toSave = { ...pendingRef.current };
+          if (Object.keys(toSave).length > 0) {
+            setSaveStatus('saving');
+            saveMutation.mutate(toSave);
+          }
+        }}
+        className="pointer-events-auto w-full max-w-lg gap-2 h-12 text-sm font-bold rounded-xl border-0 disabled:opacity-50"
+        style={{
+          background: 'linear-gradient(135deg, #FFD700 0%, #C9A832 100%)',
+          color: '#000',
+          boxShadow: '0 4px 20px rgba(201,168,50,0.45)',
+        }}
+      >
+        {saveStatus === 'saving' && <><Save className="w-4 h-4 animate-pulse" /> Saving…</>}
+        {saveStatus === 'saved' && <><CheckCircle2 className="w-4 h-4" /> Saved</>}
+        {saveStatus === 'idle' && <><Save className="w-4 h-4" /> {Object.keys(pendingUpdates).length > 0 ? 'Save Changes' : 'Saved'}</>}
+      </Button>
+    </div>
+    </>
   );
 }
