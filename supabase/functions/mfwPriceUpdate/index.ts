@@ -73,7 +73,16 @@ async function fetchYahooQuote(ticker) {
   const pctChange = (fromPrice) => (fromPrice && fromPrice > 0) ? ((price - fromPrice) / fromPrice) * 100 : null;
 
   const now = Date.now();
-  const prevClose = result?.meta?.chartPreviousClose ?? findCloseBefore(now - 24 * 3600 * 1000);
+  // NOT meta.chartPreviousClose: that is the close immediately BEFORE the start
+  // of the requested range, so with range=1y it's the price a year ago — which
+  // is how a mutual fund ended up stored with a 64% "daily" change. The previous
+  // close is the second-to-last point in the series (the last point being
+  // today's, which is also what `price` reflects).
+  const lastClose = pairs.length > 0 ? pairs[pairs.length - 1].c : null;
+  const lastPointIsToday = lastClose != null && Math.abs(lastClose - price) <= Math.abs(price) * 1e-6;
+  const prevClose = (lastPointIsToday && pairs.length > 1)
+    ? pairs[pairs.length - 2].c
+    : (findCloseBefore(now - 24 * 3600 * 1000) ?? lastClose);
   const weekAgoClose = findCloseBefore(now - 7 * 24 * 3600 * 1000);
   const monthAgoClose = findCloseBefore(now - 30 * 24 * 3600 * 1000);
   const jan1Ms = new Date(new Date().getFullYear(), 0, 1).getTime();

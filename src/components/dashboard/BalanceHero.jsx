@@ -51,6 +51,12 @@ export default function BalanceHero({ totalBalance, dailyChange, dailyChangePerc
     setIsDirty(false);
   }, [activeProfile?.total_balance_manual, totalBalance]);
 
+  // mfw_balance and has_mfw must be in the dep list, not just the id. This
+  // callback is captured for the lifetime of a mounted tab, and the MFW price
+  // job rewrites mfw_balance every morning — so a stale capture would subtract
+  // yesterday's MFW figure here, seeding the funds with the wrong non-MFW total
+  // and putting the account right back out of step with tsp.gov the moment the
+  // user had just corrected it.
   const handleUpdate = useCallback(async (val) => {
     const raw = parseFloat(String(val ?? inputValRef.current).replace(/,/g, '')) || 0;
     if (!activeProfile?.id || !raw) return;
@@ -63,7 +69,12 @@ export default function BalanceHero({ totalBalance, dailyChange, dailyChangePerc
         total_balance_manual: raw,
         balance_last_confirmed: new Date().toISOString().split('T')[0],
       });
-      await rebalanceFundAllocations(activeProfile.id, raw - (activeProfile?.mfw_balance || 0));
+      // total_balance_manual is the grand total, MFW included — so only the
+      // non-MFW remainder is what the TSP funds have to add up to. Mirrors the
+      // has_mfw guard in CurrentBalanceSettings: a leftover mfw_balance on a
+      // profile that has since turned MFW off must not be subtracted.
+      const mfwBalance = activeProfile?.has_mfw ? (activeProfile?.mfw_balance || 0) : 0;
+      await rebalanceFundAllocations(activeProfile.id, raw - mfwBalance);
       await refreshProfiles();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -72,7 +83,7 @@ export default function BalanceHero({ totalBalance, dailyChange, dailyChangePerc
     } finally {
       setSaving(false);
     }
-  }, [activeProfile?.id]);
+  }, [activeProfile?.id, activeProfile?.has_mfw, activeProfile?.mfw_balance]);
 
   // Auto-save 2.5s after user stops typing
   const scheduleAutoSave = (val) => {

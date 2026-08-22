@@ -238,10 +238,20 @@ Deno.serve(async (req) => {
         const mfwBal = profile.has_mfw && profile.mfw_balance ? profile.mfw_balance : 0;
         const totalManual = profile.total_balance_manual || 0;
 
+        // Re-valuing from unit counts (below) makes the price half of this job
+        // idempotent — running it twice for the same market day lands on exactly
+        // the same balance. Contributions are the part that isn't: they buy new
+        // units and advance loan.repaid, so a second run for a day we've already
+        // processed would double-count them. This job is the only writer that
+        // INSERTS a daily_balances row (mfwPriceUpdate only adjusts one that's
+        // already there), so a row for `today` is an exact record of having run.
+        const { data: existingBal } = await adminClient.from('daily_balances').select('*').eq('profile_id', profile.id).eq('date', today);
+        const alreadyProcessedToday = !!(existingBal && existingBal.length > 0);
         const todayIsPayDay = isPayDay(etNow, profile.pay_schedule || 'biweekly', profile.pay_date_anchor);
-        const loanResult = todayIsPayDay ? calcLoanRepayments(profile) : { total: 0, updatedLoans: profile.loans };
+        const applyContributions = todayIsPayDay && !alreadyProcessedToday;
+        const loanResult = applyContributions ? calcLoanRepayments(profile) : { total: 0, updatedLoans: profile.loans };
         const loanRepaymentAmount = loanResult.total;
-        const contributionAmount = (todayIsPayDay ? calcPayPeriodContribution(profile) : 0) + loanRepaymentAmount;
+        const contributionAmount = (applyContributions ? calcPayPeriodContribution(profile) : 0) + loanRepaymentAmount;
 
         // Fallback weighting for distributing today's contribution across funds
         // when allocation_percent isn't set (dollar-entry profiles, or a selected
@@ -263,33 +273,58 @@ Deno.serve(async (req) => {
           if (!data) continue;
 
           const newPrice = data.share_price;
-          const prevPrice = fund.share_price || newPrice;
-          const dailyReturn = data.daily_change_percent ?? (prevPrice > 0 ? ((newPrice - prevPrice) / prevPrice) * 100 : 0);
+          // The price the stored balance is currently valued at. Every writer of
+          // fund_allocations (this job, rebalanceFundAllocations, the allocation
+          // editor) keeps balance === shares x share_price, so share_price is
+          // always the price that stored balance was struck at.
+          const storedPrice = fund.share_price > 0 ? fund.share_price : 0;
+          const prevPrice = storedPrice || newPrice;
+          // Derive the day's move from the two actual prices rather than the
+          // sheet's "Day %" column. That column is rounded to two decimals
+          // (-0.86, 0.23, -1.17), and it is published independently of the price
+          // — so it can lag or lead the Price column by a day. Either way it
+          // disagrees with the prices we're storing, and the disagreement used
+          // to be baked permanently into the balance. Only fall back to it when
+          // there's no prior price to measure against.
+          const dailyReturn = storedPrice > 0
+            ? ((newPrice - storedPrice) / storedPrice) * 100
+            : (data.daily_change_percent ?? 0);
           const jan1Price = (fund.jan1_share_price && fund.jan1_share_price > 0) ? fund.jan1_share_price : (JAN1_PRICES[fund.fund_name] || newPrice);
           const ytdReturn = jan1Price > 0 ? ((newPrice - jan1Price) / jan1Price) * 100 : 0;
 
-          // Each fund grows from its OWN previous balance by its OWN daily
-          // return — exactly like a real TSP account, which tracks units per
-          // fund that only move with that fund's price. It must never be
-          // reset to allocation% x total on every run: that silently forces
-          // the whole account back to the stated percentages every night,
-          // discarding any real drift between funds (confirmed against a real
-          // TSP statement — two funds sharing an allocation% had been driven
-          // to an identical dollar balance, which real accounts never do).
+          // A real TSP account holds UNITS of each fund. The dollar balance is
+          // just those units priced at today's close — it is not a running total
+          // that gets nudged by a percentage each night. Re-valuing from units is
+          // what keeps this in step with tsp.gov:
+          //   - a stale price sheet is a no-op instead of re-applying yesterday's
+          //     return to today,
+          //   - a second run for the same day reproduces the same number,
+          //   - two-decimal rounding in the sheet can't accumulate.
+          // Compounding `balance * (1 + dailyReturn/100)` did none of that: every
+          // error it made was permanent, because nothing ever re-derived the
+          // balance from a price again.
+          //
+          // Units must never be reset to allocation% x total: allocation% only
+          // says where NEW money goes, and resetting discards the real drift
+          // between funds (confirmed against a real TSP statement — two funds
+          // sharing an allocation% had been driven to an identical balance,
+          // which real accounts never do).
           const currentBal = fund.balance || fund.dollar_balance || 0;
-          let newBalance = currentBal > 0 ? currentBal * (1 + dailyReturn / 100) : currentBal;
+          let units = prevPrice > 0 ? currentBal / prevPrice : 0;
 
-          // Buy into this fund with today's contribution, split by allocation %
-          // (falling back to current-balance weighting when allocation % isn't
-          // meaningful — dollar-entry profiles, or a 0%-allocated selected fund).
-          if (contributionAmount > 0) {
+          // Buy units with today's contribution at today's price, split by
+          // allocation % (falling back to current-balance weighting when
+          // allocation % isn't meaningful — dollar-entry profiles, or a
+          // 0%-allocated selected fund).
+          if (contributionAmount > 0 && newPrice > 0) {
             const allocPct = ((fund.allocation_percent || 0) * allocScale) / 100;
             const fundShare = allocPct > 0
               ? allocPct
-              : (fundsCurrentTotal > 0 ? (fund.balance || fund.dollar_balance || 0) / fundsCurrentTotal : 1 / selectedFunds.length);
-            newBalance += contributionAmount * fundShare;
+              : (fundsCurrentTotal > 0 ? currentBal / fundsCurrentTotal : 1 / selectedFunds.length);
+            units += (contributionAmount * fundShare) / newPrice;
           }
 
+          const newBalance = units * newPrice;
           newTotalBalance += newBalance;
 
           await adminClient.from('fund_allocations').update({
@@ -298,6 +333,10 @@ Deno.serve(async (req) => {
             jan1_share_price: jan1Price,
             balance: newBalance,
             dollar_balance: newBalance,
+            // Persist the unit count this balance was struck from. Leaving it
+            // stale is what made `shares` a derived afterthought rather than the
+            // holding it represents.
+            shares: units,
             return_percent: ytdReturn,
             daily_return_percent: dailyReturn,
             wtd_return_percent: data.wtd_return_percent ?? fund.wtd_return_percent ?? 0,
@@ -308,17 +347,19 @@ Deno.serve(async (req) => {
 
         newTotalBalance += mfwBal;
 
-        // Safety net: a single day's market move can't plausibly erase a third of
-        // the balance. If the newly derived total is wildly below the stored one,
-        // treat it as a computation fault rather than a real move — bail before
-        // writing it anywhere, so a bad derivation can't destroy the balance or
-        // the history, and can't compound the next night by feeding off its own
-        // bad output.
-        if (totalManual > 0 && newTotalBalance < totalManual * 0.67) {
+        // Safety net: a single day's market move can't plausibly change the
+        // balance by a third in either direction. If the newly derived total is
+        // wildly off the stored one, treat it as a computation fault rather than
+        // a real move — bail before writing it anywhere, so a bad derivation
+        // can't wreck the balance or the history, and can't feed off its own bad
+        // output the next night. This has to catch overstatement too: guarding
+        // only the downside let the balance drift upward, away from tsp.gov,
+        // with nothing to stop it.
+        if (totalManual > 0 && (newTotalBalance < totalManual * 0.67 || newTotalBalance > totalManual * 1.33)) {
           results.push({
             profile_id: profile.id,
             skipped: true,
-            reason: `Refused implausible balance drop: ${totalManual} -> ${newTotalBalance}`,
+            reason: `Refused implausible balance move: ${totalManual} -> ${newTotalBalance}`,
           });
           continue;
         }
@@ -331,7 +372,6 @@ Deno.serve(async (req) => {
         const dailyChange = newTotalBalance - prevBal;
         const dailyChangePct = prevBal > 0 ? (dailyChange / prevBal) * 100 : 0;
 
-        const { data: existingBal } = await adminClient.from('daily_balances').select('*').eq('profile_id', profile.id).eq('date', today);
         const balRecord = {
           created_by_id: profile.created_by_id,
           profile_id: profile.id, date: today, balance: newTotalBalance,
