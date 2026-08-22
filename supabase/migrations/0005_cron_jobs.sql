@@ -1,4 +1,4 @@
--- Documents the four pg_cron jobs driving the app's nightly/scheduled work.
+-- Documents the five pg_cron jobs driving the app's nightly/scheduled work.
 -- Applied directly via mcp__Supabase__execute_sql / cron.alter_job (not
 -- through this file) since they invoke Edge Functions by URL rather than
 -- touching schema; this file exists so anyone rebuilding from scratch has
@@ -12,9 +12,37 @@
 -- incomplete or unrecorded even though the function kept running server-side.
 -- All three jobs must pass a generous timeout_milliseconds (60000) to avoid
 -- this. Do not omit it when recreating or editing these jobs.
+--
+-- TIMING (daily-price-update): this job ran at 01:00 UTC = 9:00pm ET, and the
+-- live price sheet refreshes around 8:50pm ET (its own "Last Updated" column
+-- showed 8:49:21 PM). Ten minutes of margin against a CDN-cached endpoint is
+-- no margin at all, so the job read the PREVIOUS market day's prices every
+-- night and the whole account sat a full market day behind tsp.gov. It runs at
+-- 03:00 UTC now, with a retry at 03:40 UTC.
+--
+-- Do not move it to 04:00 UTC or later. dailyPriceUpdate derives the market
+-- day it is recording from the ET clock at run time, so it must still be the
+-- previous ET calendar day when the job fires. 03:00/03:40 UTC is 11:00/11:40pm
+-- ET under EDT and 10:00/10:40pm under EST — the previous ET day either way.
+-- 04:00 UTC is midnight EDT, which would stamp the prices with the wrong date.
 
 -- select cron.schedule(
---   'daily-price-update', '0 1 * * *', $$
+--   'daily-price-update', '0 3 * * *', $$
+--   select net.http_post(
+--     url := 'https://<project-ref>.supabase.co/functions/v1/dailyPriceUpdate',
+--     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
+--     body := '{}'::jsonb,
+--     timeout_milliseconds := 60000
+--   );
+--   $$
+-- );
+
+-- Retry, for a night the sheet publishes late. Safe to run after a successful
+-- pass: dailyPriceUpdate re-values each fund from its unit count, so repricing
+-- is idempotent, and it skips contributions when a daily_balances row already
+-- exists for the day.
+-- select cron.schedule(
+--   'daily-price-update-retry', '40 3 * * *', $$
 --   select net.http_post(
 --     url := 'https://<project-ref>.supabase.co/functions/v1/dailyPriceUpdate',
 --     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
