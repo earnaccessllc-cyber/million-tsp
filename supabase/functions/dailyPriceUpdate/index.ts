@@ -62,6 +62,21 @@ function nthSundayOfMonth(year, month, n) {
   return d;
 }
 
+// The sheet stamps its own refresh time in a "Last Updated" column (only
+// populated on some rows), formatted like "8/21/2026, 8:49:21 PM". Returns it
+// as YYYY-MM-DD so it can be checked against the day we're about to record.
+function parseSheetDate(rows) {
+  for (const row of rows) {
+    const raw = row['Last Updated'];
+    if (!raw) continue;
+    const m = String(raw).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (!m) continue;
+    const [, mo, d, y] = m;
+    return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+  return null;
+}
+
 function parsePercent(str) {
   if (!str) return null;
   const clean = String(str).replace(/[+%\s]/g, '');
@@ -220,6 +235,24 @@ Deno.serve(async (req) => {
 
     if (Object.keys(fundData).length === 0) {
       return jsonResponse({ error: 'No fund data parsed from live sheet', tspDown: true }, 200);
+    }
+
+    // Refuse to record prices that aren't actually for the day we're recording.
+    // TSP posts closing prices in the evening and this sheet picks them up
+    // around 8:50pm ET, so a job running too early (or served a cached copy)
+    // reads the PREVIOUS market day's prices — which is exactly what happened:
+    // the account sat a full market day behind tsp.gov, with each night's run
+    // writing yesterday's price under today's date. Bailing out here leaves the
+    // day unprocessed so a later run can do it properly with real data, rather
+    // than banking stale prices and marking the day done.
+    const sheetDate = parseSheetDate(rows);
+    if (sheetDate && sheetDate !== today) {
+      return jsonResponse({
+        skipped: true,
+        reason: `Price sheet is dated ${sheetDate}, not ${today} — refusing to record stale prices`,
+        date: today,
+        sheetDate,
+      });
     }
 
     const { data: allProfiles } = await adminClient.from('tsp_profiles').select('*');
