@@ -161,7 +161,26 @@ Deno.serve(async (req) => {
         const newMfwBalance = updatedHoldings.reduce((sum, h) => sum + (parseFloat(h.dollar_value) || 0), 0);
 
         const mfwDelta = newMfwBalance - oldMfwBalance;
-        const newTotalBalance = (profile.total_balance_manual || 0) + mfwDelta;
+
+        // Derive the total from its parts rather than patching the stored total
+        // by the MFW delta. Patching assumes the MFW component baked into
+        // total_balance_manual is exactly oldMfwBalance — which is false any
+        // time the user confirms a balance from tsp.gov, because tsp.gov's own
+        // MFW figure lags the mutual fund's posted NAV. Under the patching
+        // model that lag was silently absorbed into the TSP fund balances and
+        // never came back out. The TSP funds and the MFW holdings are each
+        // tracked in units against their own prices, so their sum is the total;
+        // nothing else needs to be trusted.
+        const { data: mfwAllocs } = await adminClient.from('fund_allocations').select('balance, dollar_balance, is_selected').eq('profile_id', profile.id);
+        const fundsTotal = (mfwAllocs || [])
+          .filter(f => f.is_selected)
+          .reduce((sum, f) => sum + (Number(f.balance) || Number(f.dollar_balance) || 0), 0);
+        // Fall back to the delta only when there are no fund balances to derive
+        // from (profile set up with a manual total but no allocations yet) —
+        // deriving there would wipe the balance out to just the MFW piece.
+        const newTotalBalance = fundsTotal > 0
+          ? fundsTotal + newMfwBalance
+          : (profile.total_balance_manual || 0) + mfwDelta;
 
         await adminClient.from('tsp_profiles').update({
           mfw_holdings: updatedHoldings,
