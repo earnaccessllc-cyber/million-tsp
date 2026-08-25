@@ -3,19 +3,7 @@ import { motion } from 'framer-motion';
 import { Trophy, TrendingUp, Zap } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { formatCurrency } from '@/lib/tspFunds';
-import { resolveContrib, PAY_PERIODS } from '@/lib/contributionCalc';
-
-function projectToGoal(balance, monthlyContrib, target, annualReturn = 7) {
-  const monthlyRate = annualReturn / 100 / 12;
-  let bal = balance;
-  let months = 0;
-  const TARGET = target;
-  while (bal < TARGET && months < 600) {
-    bal = bal * (1 + monthlyRate) + monthlyContrib;
-    months++;
-  }
-  return { months, reached: bal >= TARGET };
-}
+import { getMonthlyContrib, getAnnualReturn, projectToGoal, MAX_PROJECTION_MONTHS } from '@/lib/goalProjection';
 
 export default function MillionaireTracker({ profile, tspBalance }) {
   const [extraPercent, setExtraPercent] = useState(0);
@@ -29,18 +17,16 @@ export default function MillionaireTracker({ profile, tspBalance }) {
   // Activity use, not the standalone traditional_contributions/roth_contributions
   // fields — those are never kept in sync with the real percent/dollar settings
   // and had drifted to $0, silently zeroing out this projection.
-  const paySchedule = profile.pay_schedule || 'biweekly';
-  const periodsPerYear = PAY_PERIODS[paySchedule] || 26;
-  const trad = resolveContrib(profile.contrib_traditional_mode || 'percent', profile.contrib_traditional_percent || 0, profile.contrib_traditional_dollar || 0, salary, paySchedule);
-  const roth = resolveContrib(profile.contrib_roth_mode || 'percent', profile.contrib_roth_percent || 0, profile.contrib_roth_dollar || 0, salary, paySchedule);
-  const baseMonthlyContrib = (trad.dollar + roth.dollar) * periodsPerYear / 12;
+  // Shared with the Home screen's Goal Progress card so both show one pace.
+  const baseMonthlyContrib = getMonthlyContrib(profile);
+  const annualReturn = getAnnualReturn(profile);
   const bonusContrib = whatIfMode === 'percent'
     ? (salary * extraPercent / 100) / 12
     : extraDollar;
   const monthlyContrib = baseMonthlyContrib + bonusContrib;
 
-  const base = projectToGoal(tspBalance, baseMonthlyContrib, GOAL);
-  const boosted = projectToGoal(tspBalance, monthlyContrib, GOAL);
+  const base = projectToGoal(tspBalance, baseMonthlyContrib, GOAL, annualReturn);
+  const boosted = projectToGoal(tspBalance, monthlyContrib, GOAL, annualReturn);
 
   const progress = Math.min((tspBalance / GOAL) * 100, 100);
   const isMillion = tspBalance >= GOAL;
@@ -57,7 +43,8 @@ export default function MillionaireTracker({ profile, tspBalance }) {
   }, [isMillion]);
 
   const formatMonths = (months) => {
-    if (!months || months >= 600) return 'Goal not reachable';
+    if (months === 0) return 'Goal reached';
+    if (!months || months >= MAX_PROJECTION_MONTHS) return 'Goal not reachable';
     const y = Math.floor(months / 12);
     const m = months % 12;
     const target = new Date();
@@ -70,7 +57,7 @@ export default function MillionaireTracker({ profile, tspBalance }) {
     let lo = 0, hi = 100000;
     for (let i = 0; i < 50; i++) {
       const mid = (lo + hi) / 2;
-      const res = projectToGoal(tspBalance, mid, GOAL);
+      const res = projectToGoal(tspBalance, mid, GOAL, annualReturn);
       if (res.months <= 360) hi = mid; else lo = mid;
     }
     return Math.ceil(lo);

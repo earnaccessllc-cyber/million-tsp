@@ -61,11 +61,11 @@ export default function RetirementEnhanced() {
   const selectedFunds = funds.filter(f => f.is_selected);
   const fundsBalance = selectedFunds.reduce((sum, f) => sum + (f.balance || 0), 0);
   const mfwBalance = activeProfile?.has_mfw ? (activeProfile?.mfw_balance || 0) : 0;
+  // Mirrors the Home screen's total exactly (MFW rides on top of the fund-only
+  // *and* opening-balance fallbacks) so goal progress/pace match across tabs.
   const tspBalance = activeProfile?.total_balance_manual
     ? activeProfile.total_balance_manual
-    : fundsBalance > 0
-      ? (fundsBalance + mfwBalance)
-      : (activeProfile?.opening_balance || 0);
+    : (fundsBalance > 0 ? fundsBalance : (activeProfile?.opening_balance || 0)) + mfwBalance;
   const handleUpdate = (updates) => {
     pendingRef.current = { ...pendingRef.current, ...updates };
     setPendingUpdates(prev => ({ ...prev, ...updates }));
