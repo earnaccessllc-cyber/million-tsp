@@ -3,7 +3,14 @@ import { motion } from 'framer-motion';
 import { Trophy, TrendingUp, Zap } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { formatCurrency } from '@/lib/tspFunds';
-import { getMonthlyContrib, getAnnualReturn, projectToGoal, MAX_PROJECTION_MONTHS } from '@/lib/goalProjection';
+import {
+  getMonthlyContribBreakdown,
+  getMonthlyAgencyContrib,
+  extraMonthlyToPct,
+  getAnnualReturn,
+  projectToGoal,
+  MAX_PROJECTION_MONTHS,
+} from '@/lib/goalProjection';
 
 export default function MillionaireTracker({ profile, tspBalance }) {
   const [extraPercent, setExtraPercent] = useState(0);
@@ -18,12 +25,21 @@ export default function MillionaireTracker({ profile, tspBalance }) {
   // fields — those are never kept in sync with the real percent/dollar settings
   // and had drifted to $0, silently zeroing out this projection.
   // Shared with the Home screen's Goal Progress card so both show one pace.
-  const baseMonthlyContrib = getMonthlyContrib(profile);
+  // .total is employee contributions + agency match/auto 1%, since all of it
+  // actually lands in the account and moves the goal date.
+  const contrib = getMonthlyContribBreakdown(profile);
+  const baseMonthlyContrib = contrib.total;
   const annualReturn = getAnnualReturn(profile);
   const bonusContrib = whatIfMode === 'percent'
     ? (salary * extraPercent / 100) / 12
     : extraDollar;
-  const monthlyContrib = baseMonthlyContrib + bonusContrib;
+  // Contributing more can also earn more match (up to the 5% cap), so the boosted
+  // projection re-derives the agency side at the higher employee percentage rather
+  // than carrying the current one over.
+  const bonusPct = whatIfMode === 'percent' ? extraPercent : extraMonthlyToPct(profile, extraDollar);
+  const boostedAgency = getMonthlyAgencyContrib(profile, contrib.employeePct + bonusPct);
+  const monthlyContrib = contrib.employee + bonusContrib + boostedAgency;
+  const bonusAgency = boostedAgency - contrib.agency;
 
   const base = projectToGoal(tspBalance, baseMonthlyContrib, GOAL, annualReturn);
   const boosted = projectToGoal(tspBalance, monthlyContrib, GOAL, annualReturn);
@@ -52,12 +68,15 @@ export default function MillionaireTracker({ profile, tspBalance }) {
     return `${y > 0 ? `${y}y ` : ''}${m}m — ${target.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
   };
 
+  // What *you* would have to put in each month; whatever match that earns is
+  // counted on top, so the number isn't inflated by the agency's share.
   const monthlyNeeded = (() => {
     if (tspBalance >= GOAL) return 0;
     let lo = 0, hi = 100000;
     for (let i = 0; i < 50; i++) {
       const mid = (lo + hi) / 2;
-      const res = projectToGoal(tspBalance, mid, GOAL, annualReturn);
+      const withAgency = mid + getMonthlyAgencyContrib(profile, extraMonthlyToPct(profile, mid));
+      const res = projectToGoal(tspBalance, withAgency, GOAL, annualReturn);
       if (res.months <= 360) hi = mid; else lo = mid;
     }
     return Math.ceil(lo);
@@ -120,16 +139,31 @@ export default function MillionaireTracker({ profile, tspBalance }) {
             <p className="text-xs text-muted-foreground mb-1">Current pace</p>
             <p className="text-xs font-semibold">{formatMonths(base.months)}</p>
           </div>
-          {extraPercent > 0 && (
+          {bonusContrib > 0 && (
             <div className="bg-gain/10 border border-gain/20 rounded-xl p-3">
-              <p className="text-xs text-gain mb-1">+{extraPercent}% more</p>
+              {/* Dollar mode used to render nothing here — the what-if tile keyed off
+                  extraPercent, so a $ amount changed the math but showed no result. */}
+              <p className="text-xs text-gain mb-1">
+                {whatIfMode === 'percent' ? `+${extraPercent}% more` : `+${formatCurrency(bonusContrib)}/mo more`}
+              </p>
               <p className="text-xs font-semibold">{formatMonths(boosted.months)}</p>
             </div>
           )}
         </div>
 
+        {baseMonthlyContrib > 0 && (
+          <p className="text-[11px] text-muted-foreground">
+            Funded by {formatCurrency(contrib.employee)}/mo of your contributions
+            {contrib.agency > 0 && <> + {formatCurrency(contrib.agency)}/mo agency match</>}
+            {' '}at {annualReturn}% annual return.
+          </p>
+        )}
+
         <div className="pt-2 border-t border-border">
-          <p className="text-xs text-muted-foreground mb-1">Monthly contributions needed to reach {formatCurrency(GOAL)} in 30 years:</p>
+          <p className="text-xs text-muted-foreground mb-1">
+            Your monthly contributions needed to reach {formatCurrency(GOAL)} in 30 years
+            {contrib.agency > 0 ? ' (agency match counted on top)' : ''}:
+          </p>
           <p className="text-lg font-bold text-primary">{formatCurrency(monthlyNeeded)}/mo</p>
         </div>
       </div>
@@ -185,6 +219,11 @@ export default function MillionaireTracker({ profile, tspBalance }) {
                 <span className="text-xs text-muted-foreground">/mo</span>
               </div>
             </>
+          )}
+          {bonusAgency > 0 && (
+            <p className="text-xs text-gain">
+              + {formatCurrency(bonusAgency)}/mo of extra agency match earned
+            </p>
           )}
           {bonusContrib > 0 && base.months > boosted.months && (
             <p className="text-xs text-gain font-medium">

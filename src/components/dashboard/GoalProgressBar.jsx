@@ -16,7 +16,7 @@ export default function GoalProgressBar({ currentBalance, balanceGoal, profile }
   const isComplete = currentBalance >= goal;
 
   // Same projection the Retire tab's Goal Timeline runs, so both show one pace.
-  const { monthlyContrib, annualReturn, date } = projectGoalFromProfile(profile, currentBalance, goal);
+  const { monthlyContrib, contrib, annualReturn, date } = projectGoalFromProfile(profile, currentBalance, goal);
   const projectedDate = !isComplete ? formatGoalDate(date) : null;
 
   return (
@@ -59,7 +59,7 @@ export default function GoalProgressBar({ currentBalance, balanceGoal, profile }
       {projectedDate && (
         <p className="text-[10px] text-muted-foreground text-center mt-1">
           {monthlyContrib > 0
-            ? `📈 Projected to reach goal by ${projectedDate} (at ${annualReturn}% return + contributions)`
+            ? `📈 Projected to reach goal by ${projectedDate} (at ${annualReturn}% return + contributions${contrib.agency > 0 ? ' & agency match' : ''})`
             : `📈 Projected by ${projectedDate} at ${annualReturn}% annual return`}
         </p>
       )}
