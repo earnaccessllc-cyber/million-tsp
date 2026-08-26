@@ -171,10 +171,19 @@ Deno.serve(async (req) => {
         // never came back out. The TSP funds and the MFW holdings are each
         // tracked in units against their own prices, so their sum is the total;
         // nothing else needs to be trusted.
-        const { data: mfwAllocs } = await adminClient.from('fund_allocations').select('balance, dollar_balance, is_selected').eq('profile_id', profile.id);
-        const fundsTotal = (mfwAllocs || [])
-          .filter(f => f.is_selected)
+        const { data: mfwAllocs } = await adminClient.from('fund_allocations').select('balance, dollar_balance, is_selected, last_price_update').eq('profile_id', profile.id);
+        const selectedAllocs = (mfwAllocs || []).filter(f => f.is_selected);
+        const fundsTotal = selectedAllocs
           .reduce((sum, f) => sum + (Number(f.balance) || Number(f.dollar_balance) || 0), 0);
+
+        // The market day the WHOLE balance represents is the day the TSP funds
+        // are priced for — refreshing the MFW leg doesn't make the fund leg any
+        // more current. Stamping `today` here claimed a freshness the balance
+        // didn't have: the 5am MFW run would advance balance_last_confirmed to
+        // today while the funds still held the previous close, so the app read
+        // "as of <today> at 5:00 AM" over yesterday's fund prices.
+        const pricedDays = selectedAllocs.map(f => f.last_price_update).filter(Boolean).sort();
+        const fundsPricedFor = pricedDays.length > 0 ? pricedDays[pricedDays.length - 1] : null;
         // Fall back to the delta only when there are no fund balances to derive
         // from (profile set up with a manual total but no allocations yet) —
         // deriving there would wipe the balance out to just the MFW piece.
@@ -187,7 +196,9 @@ Deno.serve(async (req) => {
           mfw_balance: newMfwBalance,
           mfw_last_updated: today,
           total_balance_manual: newTotalBalance,
-          balance_last_confirmed: today,
+          // The day the balance is FOR (owned by the fund pricing), vs. the
+          // instant it was last recomputed (which this run legitimately moves).
+          balance_last_confirmed: fundsPricedFor || today,
           balance_last_confirmed_at: new Date().toISOString(),
         }).eq('id', profile.id);
 
