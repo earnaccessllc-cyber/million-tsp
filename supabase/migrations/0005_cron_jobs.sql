@@ -13,21 +13,38 @@
 -- All three jobs must pass a generous timeout_milliseconds (60000) to avoid
 -- this. Do not omit it when recreating or editing these jobs.
 --
--- TIMING (daily-price-update): this job ran at 01:00 UTC = 9:00pm ET, and the
--- live price sheet refreshes around 8:50pm ET (its own "Last Updated" column
--- showed 8:49:21 PM). Ten minutes of margin against a CDN-cached endpoint is
--- no margin at all, so the job read the PREVIOUS market day's prices every
--- night and the whole account sat a full market day behind tsp.gov. It runs at
--- 03:00 UTC now, with a retry at 03:40 UTC.
+-- TIMING (daily-price-update): this job ran once, at 01:00 UTC = 9:00pm ET,
+-- and the live price sheet refreshes around 8:50pm (its own "Last Updated"
+-- column showed 8:49:21 PM). Ten minutes of margin against a CDN-cached
+-- endpoint is no margin at all, so the job read the PREVIOUS market day's
+-- prices every night and the whole account sat a full market day behind
+-- tsp.gov.
 --
--- Do not move it to 04:00 UTC or later. dailyPriceUpdate derives the market
+-- It now runs as a LADDER of attempts rather than one shot: 01:00, 02:00 and
+-- 03:00 UTC, plus a 03:40 UTC retry. The account owner wants the balance
+-- updated by 8pm Central, which is the 01:00 UTC attempt under CDT and the
+-- 02:00 UTC attempt under CST (pg_cron schedules in UTC, so a fixed UTC hour
+-- drifts an hour across DST — hence covering both). The later rungs exist
+-- because 8pm Central is 9pm Eastern, which is when the sheet has historically
+-- NOT been ready yet.
+--
+-- Running the same day repeatedly is safe by design, which is what makes the
+-- ladder work at all:
+--   - dailyPriceUpdate refuses to record prices whose sheet date isn't the day
+--     being recorded, so an attempt that fires before the sheet refreshes skips
+--     instead of banking stale prices;
+--   - each fund is re-valued from its unit count, so repricing is idempotent;
+--   - contributions are applied only when no daily_balances row exists yet for
+--     the day, so they can't be double-counted by a later rung.
+--
+-- Do not add a rung at 04:00 UTC or later. dailyPriceUpdate derives the market
 -- day it is recording from the ET clock at run time, so it must still be the
--- previous ET calendar day when the job fires. 03:00/03:40 UTC is 11:00/11:40pm
--- ET under EDT and 10:00/10:40pm under EST — the previous ET day either way.
--- 04:00 UTC is midnight EDT, which would stamp the prices with the wrong date.
+-- previous ET calendar day when the job fires. 03:40 UTC is 11:40pm ET under
+-- EDT — the last usable slot. 04:00 UTC is midnight EDT, which would stamp the
+-- prices with the wrong date.
 
 -- select cron.schedule(
---   'daily-price-update', '0 3 * * *', $$
+--   'daily-price-update', '0 1,2,3 * * *', $$
 --   select net.http_post(
 --     url := 'https://<project-ref>.supabase.co/functions/v1/dailyPriceUpdate',
 --     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
@@ -37,10 +54,8 @@
 --   $$
 -- );
 
--- Retry, for a night the sheet publishes late. Safe to run after a successful
--- pass: dailyPriceUpdate re-values each fund from its unit count, so repricing
--- is idempotent, and it skips contributions when a daily_balances row already
--- exists for the day.
+-- Final rung, for a night the sheet publishes late. Safe to run after a
+-- successful pass, for the reasons listed under TIMING above.
 -- select cron.schedule(
 --   'daily-price-update-retry', '40 3 * * *', $$
 --   select net.http_post(
