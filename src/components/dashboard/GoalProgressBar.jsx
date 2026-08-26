@@ -1,39 +1,12 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Target } from 'lucide-react';
+import { projectGoalFromProfile, formatGoalDate } from '@/lib/goalProjection';
 
 function fmt(n) {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
   return `$${Math.round(n).toLocaleString()}`;
-}
-
-function projectGoalDate(balance, goal, monthlyContrib, annualReturn = 9) {
-  if (balance >= goal) return null; // already done
-  const monthlyRate = annualReturn / 100 / 12;
-  let bal = balance;
-  let months = 0;
-  while (bal < goal && months < 600) {
-    bal = bal * (1 + monthlyRate) + monthlyContrib;
-    months++;
-  }
-  if (months >= 600) return null;
-  const target = new Date();
-  target.setMonth(target.getMonth() + months);
-  return target.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-}
-
-function getMonthlyContrib(profile) {
-  if (!profile) return 0;
-  const periods = profile.pay_schedule === 'monthly' ? 12 : 26;
-  const tradDollar = profile.contrib_traditional_mode === 'dollar'
-    ? (profile.contrib_traditional_dollar || 0)
-    : ((profile.contrib_traditional_percent || 0) / 100) * (profile.current_annual_salary || 0) / periods;
-  const rothDollar = profile.contrib_roth_mode === 'dollar'
-    ? (profile.contrib_roth_dollar || 0)
-    : ((profile.contrib_roth_percent || 0) / 100) * (profile.current_annual_salary || 0) / periods;
-  const perPeriod = tradDollar + rothDollar;
-  return perPeriod * periods / 12;
 }
 
 export default function GoalProgressBar({ currentBalance, balanceGoal, profile }) {
@@ -42,8 +15,9 @@ export default function GoalProgressBar({ currentBalance, balanceGoal, profile }
   const remaining = Math.max(goal - currentBalance, 0);
   const isComplete = currentBalance >= goal;
 
-  const monthlyContrib = getMonthlyContrib(profile);
-  const projectedDate = !isComplete ? projectGoalDate(currentBalance, goal, monthlyContrib) : null;
+  // Same projection the Retire tab's Goal Timeline runs, so both show one pace.
+  const { monthlyContrib, contrib, annualReturn, date } = projectGoalFromProfile(profile, currentBalance, goal);
+  const projectedDate = !isComplete ? formatGoalDate(date) : null;
 
   return (
     <div className="bg-card rounded-xl border border-border p-4">
@@ -85,8 +59,8 @@ export default function GoalProgressBar({ currentBalance, balanceGoal, profile }
       {projectedDate && (
         <p className="text-[10px] text-muted-foreground text-center mt-1">
           {monthlyContrib > 0
-            ? `📈 Projected to reach goal by ${projectedDate} (at 9% return + contributions)`
-            : `📈 Projected by ${projectedDate} at 9% annual return`}
+            ? `📈 Projected to reach goal by ${projectedDate} (at ${annualReturn}% return + contributions${contrib.agency > 0 ? ' & agency match' : ''})`
+            : `📈 Projected by ${projectedDate} at ${annualReturn}% annual return`}
         </p>
       )}
     </div>

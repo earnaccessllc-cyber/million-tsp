@@ -73,6 +73,16 @@ export function resolveContrib(mode, pct, dollar, salary, paySchedule) {
 }
 
 /**
+ * The agency type to actually calculate with.
+ * retirement_system (Retirement tab) and agency_type (Settings > Contributions) are set
+ * independently — a CSRS employee could leave agency_type at its 'usps' default without ever
+ * touching that dropdown. CSRS never gets agency match/auto 1%, so it always overrides here.
+ */
+export function resolveAgencyType(profile) {
+  return profile?.retirement_system === 'CSRS' ? 'csrs' : (profile?.agency_type || 'usps');
+}
+
+/**
  * Calculate agency match per pay period and as % of salary
  * Returns { matchDollar, matchPct, auto1Dollar, auto1Pct }
  */
@@ -116,10 +126,7 @@ export function calcAgencyMatch(agencyType, employeePct, salary, paySchedule = '
 export function calcYTD(profile) {
   const salary = profile?.current_annual_salary || 0;
   const paySchedule = profile?.pay_schedule || 'biweekly';
-  // retirement_system (Retirement tab) and agency_type (Settings > Contributions) are set
-  // independently — a CSRS employee could leave agency_type at its 'usps' default without ever
-  // touching that dropdown. CSRS never gets agency match/auto 1%, so it always overrides here.
-  const agencyType = profile?.retirement_system === 'CSRS' ? 'csrs' : (profile?.agency_type || 'usps');
+  const agencyType = resolveAgencyType(profile);
   const periods = PAY_PERIODS[paySchedule] || 26;
   const periodsElapsed = getPeriodsElapsed(paySchedule, profile?.pay_date_anchor);
 
