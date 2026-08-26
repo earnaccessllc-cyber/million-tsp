@@ -7,26 +7,27 @@ import YTDBadge from '@/components/dashboard/YTDBadge';
 import { useProfile } from '@/context/ProfileContext';
 import { rebalanceFundAllocations } from '@/lib/rebalanceFunds';
 import { calcYTD } from '@/lib/contributionCalc';
+import { formatUpdatedAt, localDateString } from '@/lib/balanceUpdatedAt';
 
+// Shows when the balance was actually priced, in the viewer's own timezone.
+// This used to append a hardcoded "at 8:00pm ET" to whatever date was stored,
+// which stopped being true on both halves: the price update is polled now, so
+// the time moves with when the source publishes, and the viewer isn't
+// necessarily in Eastern.
 function LastUpdateLabel({ profile }) {
-  const lastConfirmed = profile?.balance_last_confirmed;
-  const today = new Date().toISOString().split('T')[0];
-  const isToday = lastConfirmed === today;
-
-  const label = isToday
-    ? 'Updated today at 8:00pm ET'
-    : lastConfirmed
-      ? `Updated ${new Date(lastConfirmed + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at 8:00pm ET`
-      : null;
-
+  const label = formatUpdatedAt(profile?.balance_last_confirmed_at, profile?.balance_last_confirmed);
   if (!label) return null;
-  return <p className="text-xs text-muted-foreground mt-1">{label}</p>;
+  return <p className="text-xs text-muted-foreground mt-1">Updated {label}</p>;
 }
 
 export default function BalanceHero({ totalBalance, dailyChange, dailyChangePercent, highestBalance, highestBalanceDate, openingBalance, funds, profile }) {
   const { activeProfile, refreshProfiles } = useProfile();
   const isPositive = (dailyChange || 0) >= 0;
-  const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  // The date this balance is actually priced for, not whatever today happens to
+  // be in the browser — those differ every evening before the update lands, and
+  // on every weekend and holiday.
+  const asOf = formatUpdatedAt(profile?.balance_last_confirmed_at, profile?.balance_last_confirmed, { long: true })
+    || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   const employmentType = profile?.employment_type === 'military' ? 'Military' : 'Civilian';
 
   const [inputVal, setInputVal] = useState('');
@@ -67,7 +68,10 @@ export default function BalanceHero({ totalBalance, dailyChange, dailyChangePerc
     try {
       await base44.entities.TSPProfile.update(activeProfile.id, {
         total_balance_manual: raw,
-        balance_last_confirmed: new Date().toISOString().split('T')[0],
+        // Local date, not UTC: toISOString() rolls over during the evening for
+        // US users and would stamp the balance with tomorrow's market day.
+        balance_last_confirmed: localDateString(),
+        balance_last_confirmed_at: new Date().toISOString(),
       });
       // total_balance_manual is the grand total, MFW included — so only the
       // non-MFW remainder is what the TSP funds have to add up to. Mirrors the
@@ -148,7 +152,7 @@ export default function BalanceHero({ totalBalance, dailyChange, dailyChangePerc
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-0.5">
         Thrift Savings Plan — {employmentType}
       </p>
-      <p className="text-xs text-muted-foreground mb-3">as of {today}</p>
+      <p className="text-xs text-muted-foreground mb-3">as of {asOf}</p>
 
       {/* MFW breakdown — shown above input when MFW is active */}
       {profile?.has_mfw && profile?.mfw_balance > 0 && (

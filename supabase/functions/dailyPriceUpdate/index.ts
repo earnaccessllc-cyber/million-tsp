@@ -435,7 +435,15 @@ Deno.serve(async (req) => {
           await adminClient.from('daily_balances').insert(balRecord);
         }
 
-        const profileUpdates = { total_balance_manual: newTotalBalance, balance_last_confirmed: today };
+        // balance_last_confirmed is the market DAY these prices belong to;
+        // balance_last_confirmed_at is the instant we actually wrote them. The
+        // UI needs both — the day to label the figure, the instant to show a
+        // real update time instead of a hardcoded one.
+        const profileUpdates = {
+          total_balance_manual: newTotalBalance,
+          balance_last_confirmed: today,
+          balance_last_confirmed_at: new Date().toISOString(),
+        };
         if (loanRepaymentAmount > 0) {
           profileUpdates.loans = loanResult.updatedLoans;
         }

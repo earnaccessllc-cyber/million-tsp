@@ -188,6 +188,7 @@ Deno.serve(async (req) => {
           mfw_last_updated: today,
           total_balance_manual: newTotalBalance,
           balance_last_confirmed: today,
+          balance_last_confirmed_at: new Date().toISOString(),
         }).eq('id', profile.id);
 
         const { data: existingBal } = await adminClient.from('daily_balances').select('*').eq('profile_id', profile.id).eq('date', today);

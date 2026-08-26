@@ -7,12 +7,7 @@ import { Label } from '@/components/ui/label';
 import { CheckCircle2, ExternalLink, DollarSign } from 'lucide-react';
 import MFWHoldingsTracker from '@/components/settings/MFWHoldingsTracker';
 import { rebalanceFundAllocations } from '@/lib/rebalanceFunds';
-
-function formatDate(dateStr) {
-  if (!dateStr) return null;
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-}
+import { formatUpdatedAt, localDateString } from '@/lib/balanceUpdatedAt';
 
 export default function CurrentBalanceSettings() {
   const { activeProfile, refreshProfiles } = useProfile();
@@ -42,7 +37,10 @@ export default function CurrentBalanceSettings() {
     setSaving(true);
     await base44.entities.TSPProfile.update(activeProfile.id, {
       total_balance_manual: parseFloat(totalBalance) || 0,
-      balance_last_confirmed: new Date().toISOString().split('T')[0],
+      // Local date, not UTC: toISOString() rolls over during the evening for US
+      // users and would stamp the balance with tomorrow's market day.
+      balance_last_confirmed: localDateString(),
+      balance_last_confirmed_at: new Date().toISOString(),
       has_mfw: hasMfw,
       ...(!hasMfw ? { mfw_balance: 0, mfw_holdings: [] } : {}),
     });
@@ -58,7 +56,8 @@ export default function CurrentBalanceSettings() {
   // Show the last time the balance was actually confirmed/updated (manual save, nightly job,
   // or allocation save) — not balance_install_date, which is a one-time timestamp frozen from
   // the day the account was first set up and never reflects how current the balance really is.
-  const lastConfirmedLabel = formatDate(activeProfile?.balance_last_confirmed) || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const lastConfirmedLabel = formatUpdatedAt(activeProfile?.balance_last_confirmed_at, activeProfile?.balance_last_confirmed, { long: true })
+    || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   return (
     <div className="rounded-xl border-2 border-primary/40 bg-primary/5 overflow-hidden">
