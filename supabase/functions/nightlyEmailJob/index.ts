@@ -32,6 +32,21 @@ function nthSundayOfMonth(year, month, n) {
   return d;
 }
 
+// Same holiday set the price jobs use. Needed here to tell "the update hasn't
+// run yet" apart from "there is no update to wait for" on a weekend or holiday.
+const MARKET_HOLIDAYS = new Set([
+  '2025-01-01','2025-01-20','2025-02-17','2025-05-26','2025-06-19','2025-07-04','2025-09-01','2025-11-27','2025-12-25',
+  '2026-01-01','2026-01-19','2026-02-16','2026-05-25','2026-06-19','2026-07-03','2026-09-07','2026-11-26','2026-12-25',
+  '2027-01-01','2027-01-18','2027-02-15','2027-05-31','2027-06-18','2027-07-05','2027-09-06','2027-11-25','2027-12-24',
+]);
+
+function isMarketDay(dateStr) {
+  if (MARKET_HOLIDAYS.has(dateStr)) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return dow !== 0 && dow !== 6;
+}
+
 function formatCurrency(value) {
   const n = Number(value) || 0;
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -138,6 +153,28 @@ Deno.serve(async (req) => {
           .eq('profile_id', profile.id)
           .eq('date', today)
           .maybeSingle();
+
+        // The due time says "not before this", not "send now". TSP closing
+        // prices don't exist until the evening — with a due time of 20:00 ET
+        // and the price sheet publishing around 21:50 ET, a purely clock-driven
+        // send goes out nearly two hours early and reports the PREVIOUS day's
+        // balance. Wait for the day to actually be priced.
+        //
+        // dailyPriceUpdate writes this row as the last step of pricing a market
+        // day, so its presence is the precise signal that the balance in this
+        // email is today's. Skipping just defers to a later tick — the job runs
+        // every 15 minutes, so the mail goes out shortly after the update lands.
+        //
+        // Only gate market days: on a weekend or holiday no row is ever coming,
+        // and gating there would suppress the mail entirely.
+        if (isMarketDay(today) && !todayBal) {
+          results.push({
+            profile_id: profile.id,
+            skipped: true,
+            reason: `Waiting for today's price update before emailing (due ${dueTime}, now ${currentHHMM})`,
+          });
+          continue;
+        }
 
         const balance = profile.total_balance_manual || 0;
         const dailyChange = todayBal?.daily_change || 0;
