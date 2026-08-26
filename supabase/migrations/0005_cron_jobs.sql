@@ -31,12 +31,23 @@
 -- So the earliest the data can exist is ~8:50pm Central. A run at 8:00pm
 -- Central is 49 minutes too early and can only ever skip.
 --
--- It now runs as a LADDER of attempts rather than one shot:
---   01:00 UTC  8:00pm CT  — the requested time; skips until the sheet moves earlier
---   01:55 UTC  8:55pm CT  — primary; ~6 min after the sheet publishes
---   02:00, 02:40, 03:00, 03:40 UTC — catch-ups through 10:40pm CT
--- (pg_cron schedules in UTC, so these all shift an hour in Central terms
--- across DST; the ladder is wide enough to absorb that.)
+-- It is now POLLED rather than run at fixed times, so the balance moves as
+-- soon as the price does instead of waiting for the next scheduled slot:
+--   */2 over 01:00-02:58 UTC          — every 2 minutes across the publish window
+--   03:00-03:40 UTC every 10 minutes  — tail, before the ET date boundary
+--
+-- Polling every 2 minutes is what makes this land within ~2 minutes of the
+-- sheet publishing, and it covers BOTH daylight regimes without editing the
+-- cron twice a year: an 8:49pm Central publish is 01:49 UTC under CDT and
+-- 02:49 UTC under CST, and the window spans both.
+--
+-- Polls cost almost nothing because both halves short-circuit:
+--   - before the sheet publishes, the sheet-date check returns before any
+--     profile work (one small fetch, no DB writes);
+--   - after the day is priced, each profile bails as soon as it sees its
+--     stored share_price already equals what the sheet is serving.
+-- Without that second guard every poll for the rest of the window would
+-- rewrite the same three funds, the profile and the daily_balances row.
 --
 -- Running the same day repeatedly is safe by design, which is what makes the
 -- ladder work at all:
@@ -54,7 +65,7 @@
 -- prices with the wrong date.
 
 -- select cron.schedule(
---   'daily-price-update', '0,55 1 * * *', $$
+--   'daily-price-update', '*/2 1,2 * * *', $$
 --   select net.http_post(
 --     url := 'https://<project-ref>.supabase.co/functions/v1/dailyPriceUpdate',
 --     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
@@ -67,9 +78,27 @@
 -- Final rung, for a night the sheet publishes late. Safe to run after a
 -- successful pass, for the reasons listed under TIMING above.
 -- select cron.schedule(
---   'daily-price-update-retry', '0,40 2,3 * * *', $$
+--   'daily-price-update-retry', '0,10,20,30,40 3 * * *', $$
 --   select net.http_post(
 --     url := 'https://<project-ref>.supabase.co/functions/v1/dailyPriceUpdate',
+--     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
+--     body := '{}'::jsonb,
+--     timeout_milliseconds := 60000
+--   );
+--   $$
+-- );
+
+-- mfwPriceUpdate also gained an EVENING run (03:30 UTC = 10:30pm CDT). The two
+-- morning runs alone meant the MFW half of the balance was always a day behind
+-- the TSP-fund half: the funds get that evening's close, while the MFW figure
+-- was still the previous day's NAV until the next morning. An evening run is
+-- safe even if the NAV hasn't posted yet, because the MFW value is shares x
+-- price with a fixed share count — a stale price simply leaves it unchanged
+-- and the next run corrects it. The morning runs stay as backstops.
+-- select cron.schedule(
+--   'mfw-price-update-evening', '30 3 * * *', $$
+--   select net.http_post(
+--     url := 'https://<project-ref>.supabase.co/functions/v1/mfwPriceUpdate',
 --     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
 --     body := '{}'::jsonb,
 --     timeout_milliseconds := 60000
