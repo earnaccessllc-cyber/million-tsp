@@ -20,13 +20,23 @@
 -- prices every night and the whole account sat a full market day behind
 -- tsp.gov.
 --
--- It now runs as a LADDER of attempts rather than one shot: 01:00, 02:00 and
--- 03:00 UTC, plus a 03:40 UTC retry. The account owner wants the balance
--- updated by 8pm Central, which is the 01:00 UTC attempt under CDT and the
--- 02:00 UTC attempt under CST (pg_cron schedules in UTC, so a fixed UTC hour
--- drifts an hour across DST — hence covering both). The later rungs exist
--- because 8pm Central is 9pm Eastern, which is when the sheet has historically
--- NOT been ready yet.
+-- MEASURED: the sheet's "Last Updated" stamp has read 8:49:21 PM and 8:49:22 PM
+-- on separate days — a fixed daily refresh — and the evidence says that stamp
+-- is CENTRAL, not Eastern. On 8/22 the 01:00 UTC run read the previous day's
+-- prices; 01:00 UTC is 8:49pm-plus-11-minutes only if the stamp is Eastern, so
+-- it can't be. Under Central it lands at 01:49 UTC, 11 minutes AFTER that run —
+-- which matches what the job actually saw. Confirmed from the other side on
+-- 8/26: the 02:00 UTC run (11 minutes past 01:49) succeeded first try.
+--
+-- So the earliest the data can exist is ~8:50pm Central. A run at 8:00pm
+-- Central is 49 minutes too early and can only ever skip.
+--
+-- It now runs as a LADDER of attempts rather than one shot:
+--   01:00 UTC  8:00pm CT  — the requested time; skips until the sheet moves earlier
+--   01:55 UTC  8:55pm CT  — primary; ~6 min after the sheet publishes
+--   02:00, 02:40, 03:00, 03:40 UTC — catch-ups through 10:40pm CT
+-- (pg_cron schedules in UTC, so these all shift an hour in Central terms
+-- across DST; the ladder is wide enough to absorb that.)
 --
 -- Running the same day repeatedly is safe by design, which is what makes the
 -- ladder work at all:
@@ -44,7 +54,7 @@
 -- prices with the wrong date.
 
 -- select cron.schedule(
---   'daily-price-update', '0 1,2,3 * * *', $$
+--   'daily-price-update', '0,55 1 * * *', $$
 --   select net.http_post(
 --     url := 'https://<project-ref>.supabase.co/functions/v1/dailyPriceUpdate',
 --     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
@@ -57,7 +67,7 @@
 -- Final rung, for a night the sheet publishes late. Safe to run after a
 -- successful pass, for the reasons listed under TIMING above.
 -- select cron.schedule(
---   'daily-price-update-retry', '40 3 * * *', $$
+--   'daily-price-update-retry', '0,40 2,3 * * *', $$
 --   select net.http_post(
 --     url := 'https://<project-ref>.supabase.co/functions/v1/dailyPriceUpdate',
 --     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
