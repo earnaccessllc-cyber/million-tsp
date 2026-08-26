@@ -280,6 +280,24 @@ Deno.serve(async (req) => {
         // already there), so a row for `today` is an exact record of having run.
         const { data: existingBal } = await adminClient.from('daily_balances').select('*').eq('profile_id', profile.id).eq('date', today);
         const alreadyProcessedToday = !!(existingBal && existingBal.length > 0);
+
+        // This job is polled every couple of minutes around the sheet's publish
+        // time so the balance moves as soon as the price does. Once a day has
+        // been processed at the prices currently on the sheet there is nothing
+        // left to do, so bail before touching anything — otherwise every poll
+        // for the rest of the window rewrites all the same numbers and churns
+        // updated_date. A price that moves again later still gets picked up,
+        // because this only short-circuits while the stored prices already
+        // match the sheet exactly.
+        const pricesAlreadyStored = selectedFunds.every(f => {
+          const d = fundData[f.fund_name];
+          return !d || Number(f.share_price) === Number(d.share_price);
+        });
+        if (alreadyProcessedToday && pricesAlreadyStored) {
+          results.push({ profile_id: profile.id, skipped: true, reason: 'Already priced for today at these prices' });
+          continue;
+        }
+
         const todayIsPayDay = isPayDay(etNow, profile.pay_schedule || 'biweekly', profile.pay_date_anchor);
         const applyContributions = todayIsPayDay && !alreadyProcessedToday;
         const loanResult = applyContributions ? calcLoanRepayments(profile) : { total: 0, updatedLoans: profile.loans };
