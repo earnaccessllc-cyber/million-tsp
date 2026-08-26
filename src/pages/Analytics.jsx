@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import OnboardingPrompt from '@/components/onboarding/OnboardingPrompt';
 import UpgradePrompt from '@/components/common/UpgradePrompt';
+import { useFeature } from '@/lib/proGating';
 import VolatilityScore from '@/components/analytics/VolatilityScore';
 import InflationAdjusted from '@/components/analytics/InflationAdjusted';
 import ContributionOptimizer from '@/components/analytics/ContributionOptimizer';
@@ -30,9 +31,12 @@ export default function Analytics() {
     enabled: !!activeProfile?.id,
   });
 
-  if (!activeProfile) return <OnboardingPrompt />;
+  // Was `plan === 'paid'`, which ignored an active trial — this page alone
+  // locked out trial users that every other screen let straight in. Declared
+  // above the early return: hooks must run in the same order every render.
+  const { allowed: canUseAnalytics } = useFeature('analytics');
 
-  const isPaid = activeProfile?.plan === 'paid';
+  if (!activeProfile) return <OnboardingPrompt />;
   const selectedFunds = funds.filter(f => f.is_selected);
   const totalBalance = selectedFunds.reduce((s, f) => s + (f.balance || 0), 0);
 
@@ -40,10 +44,10 @@ export default function Analytics() {
     <div className="max-w-lg mx-auto px-4 pt-4 pb-6">
       <h2 className="text-lg font-bold mb-4">Analytics</h2>
 
-      {!isPaid ? (
+      {!canUseAnalytics ? (
         <div className="space-y-4">
           <PerformanceHistory profile={activeProfile} dailyBalances={dailyBalances} />
-          <UpgradePrompt feature="Contribution optimizer, risk scoring, inflation analysis, and fund comparison" />
+          <UpgradePrompt feature="analytics" />
         </div>
       ) : (
         <Tabs defaultValue="optimizer" className="w-full">

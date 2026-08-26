@@ -20,11 +20,14 @@ import { motion } from 'framer-motion';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Shield, DollarSign, Clock, Zap } from 'lucide-react';
 import UpgradePrompt from '@/components/common/UpgradePrompt';
-import { hasFullAccess } from '@/lib/trialUtils';
+import { useFeature } from '@/lib/proGating';
 
 export default function RetirementEnhanced() {
   const { activeProfile, refreshProfiles } = useProfile();
   const queryClient = useQueryClient();
+  const { allowed: canSeeBenefits } = useFeature('retirement_benefits');
+  const { allowed: canSeeCountdown } = useFeature('retirement_countdown');
+  const { allowed: canSeeTools } = useFeature('retirement_tools');
   const { toast } = useToast();
   const [pendingUpdates, setPendingUpdates] = useState({});
   const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved
@@ -112,19 +115,19 @@ export default function RetirementEnhanced() {
             <TabsTrigger value="overview" className="text-[10px] py-1.5 flex-col gap-0.5 h-auto">
               <Shield className="w-3.5 h-3.5" />
               <span className="flex items-center gap-0.5">
-                Benefits{!hasFullAccess(activeProfile) && <span className="text-[8px] text-yellow-400 font-bold leading-none">🔒</span>}
+                Benefits{!canSeeBenefits && <span className="text-[8px] text-yellow-400 font-bold leading-none">🔒</span>}
               </span>
             </TabsTrigger>
             <TabsTrigger value="countdown" className="text-[10px] py-1.5 flex-col gap-0.5 h-auto">
               <Clock className="w-3.5 h-3.5" />
               <span className="flex items-center gap-0.5">
-                Countdown{!hasFullAccess(activeProfile) && <span className="text-[8px] text-yellow-400 font-bold leading-none">🔒</span>}
+                Countdown{!canSeeCountdown && <span className="text-[8px] text-yellow-400 font-bold leading-none">🔒</span>}
               </span>
             </TabsTrigger>
             <TabsTrigger value="tools" className="text-[10px] py-1.5 flex-col gap-0.5 h-auto">
               <Zap className="w-3.5 h-3.5" />
               <span className="flex items-center gap-0.5">
-                Tools{!hasFullAccess(activeProfile) && <span className="text-[8px] text-yellow-400 font-bold leading-none">🔒</span>}
+                Tools{!canSeeTools && <span className="text-[8px] text-yellow-400 font-bold leading-none">🔒</span>}
               </span>
             </TabsTrigger>
           </TabsList>
@@ -134,8 +137,8 @@ export default function RetirementEnhanced() {
           </TabsContent>
 
           <TabsContent value="overview" className="space-y-4">
-            {!hasFullAccess(activeProfile) ? (
-              <UpgradePrompt feature="FERS/CSRS eligibility rules, pension calculator, and income timeline" />
+            {!canSeeBenefits ? (
+              <UpgradePrompt feature="retirement_benefits" />
             ) : (
               <>
                 <div className="p-4 bg-card rounded-xl border border-border">
@@ -150,8 +153,8 @@ export default function RetirementEnhanced() {
           </TabsContent>
 
           <TabsContent value="countdown">
-            {!hasFullAccess(activeProfile) ? (
-              <UpgradePrompt feature="retirement countdown, savings streaks, and milestone tracking" />
+            {!canSeeCountdown ? (
+              <UpgradePrompt feature="retirement_countdown" />
             ) : (
               <div className="space-y-4">
                 <RetirementCountdown profile={mergedProfile} />
@@ -161,8 +164,8 @@ export default function RetirementEnhanced() {
           </TabsContent>
 
           <TabsContent value="tools" className="space-y-4">
-            {!hasFullAccess(activeProfile) ? (
-              <UpgradePrompt feature="TSP loan calculator and planning tools" />
+            {!canSeeTools ? (
+              <UpgradePrompt feature="retirement_tools" />
             ) : (
               <TSPLoanCalculator profile={mergedProfile} tspBalance={tspBalance} />
             )}

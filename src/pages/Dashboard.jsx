@@ -11,13 +11,19 @@ import RetirementCountdown from '@/components/retirement/RetirementCountdown';
 import { isMarketDay } from '@/lib/marketDays';
 import UpgradePrompt from '@/components/common/UpgradePrompt';
 import GoalProgressBar from '@/components/dashboard/GoalProgressBar';
-import { hasFullAccess } from '@/lib/trialUtils';
+import { useFeature } from '@/lib/proGating';
 import PullToRefresh from '@/components/common/PullToRefresh';
 
 
 export default function Dashboard() {
   const { activeProfile, isLoading: profileLoading, refreshProfiles } = useProfile();
   const queryClient = useQueryClient();
+  // Free tier is the daily balance itself; everything derived from it is Pro.
+  // Hooks must run before the early returns below, so they live up here.
+  const { allowed: canSeeGoal } = useFeature('goal_tracking');
+  const { allowed: canSeeCountdown } = useFeature('retirement_countdown');
+  const { allowed: canSeeInsights } = useFeature('dashboard_insights');
+  const { allowed: canSeeDailyLog } = useFeature('daily_log');
   const { data: funds = [] } = useQuery({
     queryKey: ['fund-allocations', activeProfile?.id],
     queryFn: () => base44.entities.FundAllocation.filter({ profile_id: activeProfile.id }),
@@ -66,8 +72,6 @@ export default function Dashboard() {
   const dailyChange = todayBalance?.daily_change || 0;
   const dailyChangePercent = todayBalance?.daily_change_percent || 0;
 
-  const isPaid = hasFullAccess(activeProfile);
-
   return (
     <PullToRefresh onRefresh={handleRefresh}>
     <div className="max-w-lg mx-auto">
@@ -76,8 +80,8 @@ export default function Dashboard() {
         <MarketMood />
       </div>
 
-      {/* Goal Progress Bar — always visible */}
-      {activeProfile.balance_goal > 0 && (
+      {/* Goal Progress Bar — Pro */}
+      {canSeeGoal && activeProfile.balance_goal > 0 && (
         <div className="px-4 mt-3">
           <GoalProgressBar currentBalance={totalBalance} balanceGoal={activeProfile.balance_goal} profile={activeProfile} />
         </div>
@@ -95,13 +99,15 @@ export default function Dashboard() {
         profile={activeProfile}
       />
 
-      {/* Retirement Countdown — always visible */}
-      <div className="mx-4 mt-4">
-        <RetirementCountdown profile={activeProfile} compact />
-      </div>
+      {/* Retirement Countdown — Pro */}
+      {canSeeCountdown && (
+        <div className="mx-4 mt-4">
+          <RetirementCountdown profile={activeProfile} compact />
+        </div>
+      )}
 
-      {/* Paid-only features */}
-      {isPaid ? (
+      {/* Pro features */}
+      {canSeeInsights ? (
         <>
           <SickLeaveCard profile={activeProfile} tspBalance={totalBalance} />
           <YTDActivity profile={activeProfile} totalBalance={totalBalance} />
@@ -109,12 +115,12 @@ export default function Dashboard() {
         </>
       ) : (
         <div className="mx-4 mt-4">
-          <UpgradePrompt feature="Goal tracking, sick leave credits, YTD activity breakdown, and gain/loss tracker" />
+          <UpgradePrompt feature="dashboard_insights" />
         </div>
       )}
 
       {/* Daily Log Preview — always visible */}
-      {isPaid && sortedBalances.length > 0 && (
+      {canSeeDailyLog && sortedBalances.length > 0 && (
         <div className="mx-4 mt-4 mb-6 p-4 bg-card rounded-xl border border-border">
           <h3 className="text-sm font-semibold mb-3">Recent Daily Changes</h3>
           <div className="space-y-2">
