@@ -1,24 +1,19 @@
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { formatCurrency } from '@/lib/tspFunds';
-import ProGate from '@/components/common/ProGate';
 import { useProStatus } from '@/lib/proGating';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
 const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
-export default function PortfolioHistoryPanel({ funds, dailyBalances, showExtended }) {
+export default function PortfolioHistoryPanel({ funds, dailyBalances }) {
+  // Extended range is the Pro part of this panel; the recent chart is free.
+  // This used to hinge on a `showExtended` prop that the only call site never
+  // passed, so the gate could not fire and the ALL range was never offered to
+  // anyone — Pro included. Deriving it from the plan makes the feature real.
   const { isPro } = useProStatus();
+  const showExtended = isPro;
   const [period, setPeriod] = useState('1M');
-
-  if (showExtended && !isPro) {
-    return (
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold">Fund Price History</h3>
-        <ProGate feature="advanced_fund_history" />
-      </div>
-    );
-  }
 
   // Build chart data from daily balances
   const sorted = [...(dailyBalances || [])].sort((a, b) => new Date(a.date) - new Date(b.date));

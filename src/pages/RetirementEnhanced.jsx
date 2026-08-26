@@ -25,6 +25,7 @@ import { useFeature } from '@/lib/proGating';
 export default function RetirementEnhanced() {
   const { activeProfile, refreshProfiles } = useProfile();
   const queryClient = useQueryClient();
+  const { allowed: canSeeGoal } = useFeature('goal_tracking');
   const { allowed: canSeeBenefits } = useFeature('retirement_benefits');
   const { allowed: canSeeCountdown } = useFeature('retirement_countdown');
   const { allowed: canSeeTools } = useFeature('retirement_tools');
@@ -110,7 +111,10 @@ export default function RetirementEnhanced() {
         <Tabs defaultValue="million" className="w-full">
           <TabsList className="grid grid-cols-4 w-full mb-4 h-auto">
             <TabsTrigger value="million" className="text-[10px] py-1.5 flex-col gap-0.5 h-auto">
-              <DollarSign className="w-3.5 h-3.5" />Goal
+              <DollarSign className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-0.5">
+                Goal{!canSeeGoal && <span className="text-[8px] text-yellow-400 font-bold leading-none">🔒</span>}
+              </span>
             </TabsTrigger>
             <TabsTrigger value="overview" className="text-[10px] py-1.5 flex-col gap-0.5 h-auto">
               <Shield className="w-3.5 h-3.5" />
@@ -133,7 +137,11 @@ export default function RetirementEnhanced() {
           </TabsList>
 
           <TabsContent value="million">
-            <MillionaireTracker profile={mergedProfile} tspBalance={tspBalance} />
+            {!canSeeGoal ? (
+              <UpgradePrompt feature="goal_tracking" />
+            ) : (
+              <MillionaireTracker profile={mergedProfile} tspBalance={tspBalance} />
+            )}
           </TabsContent>
 
           <TabsContent value="overview" className="space-y-4">
