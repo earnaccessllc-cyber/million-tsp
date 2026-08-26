@@ -160,50 +160,43 @@ export default function BalanceHero({ totalBalance, dailyChange, dailyChangePerc
       {/* Editable Current Balance */}
       <div className="mb-3">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Current Balance</p>
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground text-xl font-black pointer-events-none">$</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={inputVal}
-              onChange={e => {
-                const raw = e.target.value.replace(/[^0-9.]/g, '');
-                setInputVal(raw);
-                setSaved(false);
-                setIsDirty(true);
-                scheduleAutoSave(raw);
-              }}
-              onFocus={() => {
-                setIsFocused(true);
-                setInputVal(String(inputVal).replace(/,/g, ''));
-              }}
-              onBlur={() => {
-                setIsFocused(false);
-                if (inputVal) setInputVal(formatWithCommas(inputVal));
-                if (isDirty) {
-                  clearTimeout(debounceTimer.current);
-                  handleUpdate(inputVal);
-                }
-              }}
-              onKeyDown={e => { if (e.key === 'Enter') { clearTimeout(debounceTimer.current); handleUpdate(inputVal); } }}
-              className="w-full pl-7 pr-3 h-12 text-2xl font-black bg-secondary/40 border border-border rounded-xl focus:outline-none focus:border-primary transition-colors text-foreground"
-              placeholder="0.00"
-            />
-          </div>
-          <button
-            onClick={() => { clearTimeout(debounceTimer.current); handleUpdate(inputVal); }}
-            disabled={saving}
-            className={`h-12 px-4 rounded-xl text-sm font-bold transition-all flex-shrink-0 ${
-              saved
-                ? 'bg-gain/20 text-gain border border-gain/30'
-                : isDirty
-                  ? 'bg-primary/60 text-primary-foreground border border-primary/40'
-                  : 'bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95'
-            }`}
-          >
-            {saved ? <Check className="w-4 h-4" /> : saving ? '…' : isDirty ? 'Save' : 'Update'}
-          </button>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground text-xl font-black pointer-events-none">$</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={inputVal}
+            onChange={e => {
+              const raw = e.target.value.replace(/[^0-9.]/g, '');
+              setInputVal(raw);
+              setSaved(false);
+              setIsDirty(true);
+              scheduleAutoSave(raw);
+            }}
+            onFocus={() => {
+              setIsFocused(true);
+              setInputVal(String(inputVal).replace(/,/g, ''));
+            }}
+            onBlur={() => {
+              setIsFocused(false);
+              if (inputVal) setInputVal(formatWithCommas(inputVal));
+              if (isDirty) {
+                clearTimeout(debounceTimer.current);
+                handleUpdate(inputVal);
+              }
+            }}
+            onKeyDown={e => { if (e.key === 'Enter') { clearTimeout(debounceTimer.current); handleUpdate(inputVal); e.target.blur(); } }}
+            className="w-full pl-7 pr-9 h-12 text-2xl font-black bg-secondary/40 border border-border rounded-xl focus:outline-none focus:border-primary transition-colors text-foreground"
+            placeholder="0.00"
+          />
+          {(saving || saved) && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2">
+              {saved
+                ? <Check className="w-4 h-4 text-gain" />
+                : <span className="text-xs text-muted-foreground">…</span>
+              }
+            </span>
+          )}
         </div>
       </div>
 
