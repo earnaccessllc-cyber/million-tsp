@@ -156,12 +156,10 @@ Deno.serve(async (req) => {
           .eq('profile_id', profile.id)
           .eq('is_selected', true);
 
-        // The most recently priced market day at or before now — not strictly
-        // `today`. TSP closing prices reach us around 8:50pm Central, so at an
-        // 8:30pm send time the newest complete close is the previous market
-        // day's. The mail goes at the requested time regardless and names the
-        // day it covers, rather than either waiting or silently implying the
-        // figure is current.
+        // The most recently priced market day at or before now. On a market
+        // day this should be today once pricing has landed (enforced just
+        // below); on a weekend or holiday it is the last close before it, which
+        // is what the mail then reports and labels.
         const { data: latestBals } = await adminClient
           .from('daily_balances')
           .select('*')
