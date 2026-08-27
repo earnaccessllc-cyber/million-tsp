@@ -61,7 +61,7 @@ function formatMarketDay(dateStr) {
   });
 }
 
-function buildEmailHtml({ name, asOfDate, balance, dailyChange, dailyChangePct, isGain, funds, mfwBalance }) {
+function buildEmailHtml({ name, asOfDate, balance, dailyChange, dailyChangePct, isGain, funds, mfwBalance, unsubscribeUrl }) {
   const changeColor = isGain ? '#16a34a' : '#dc2626';
   const sign = dailyChange >= 0 ? '+' : '';
   const fundRows = funds.map(f => `
@@ -100,7 +100,7 @@ function buildEmailHtml({ name, asOfDate, balance, dailyChange, dailyChangePct, 
     ${mfwBalance > 0 ? `<p style="color:#666;font-size:13px;">Mutual funds: ${formatCurrency(mfwBalance)}</p>` : ''}
 
     <p style="color:#999;font-size:12px;margin-top:24px;">
-      You're receiving this because nightly balance emails are turned on in your MillionTSP notification settings.
+      You're receiving this because nightly balance emails are turned on in your MillionTSP notification settings.${unsubscribeUrl ? `<br><a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a>` : ''}
     </p>
   </div>
   `;
@@ -193,6 +193,15 @@ Deno.serve(async (req) => {
         const dailyChangePct = todayBal?.daily_change_percent || 0;
         const isGain = dailyChange >= 0;
 
+        // Base defaults to this project's own functions host, so the link works
+        // without extra configuration; override once mail moves to a verified
+        // domain so the link matches the sending domain.
+        const unsubBase = Deno.env.get('PUBLIC_UNSUBSCRIBE_URL')
+          || `${Deno.env.get('SUPABASE_URL')}/functions/v1/unsubscribe`;
+        const unsubscribeUrl = profile.unsubscribe_token
+          ? `${unsubBase}?token=${encodeURIComponent(profile.unsubscribe_token)}`
+          : null;
+
         const html = buildEmailHtml({
           name: profile.name,
           asOfDate,
@@ -202,6 +211,7 @@ Deno.serve(async (req) => {
           isGain,
           funds: allocations || [],
           mfwBalance: profile.has_mfw ? (profile.mfw_balance || 0) : 0,
+          unsubscribeUrl,
         });
 
         const emailRes = await fetch('https://api.resend.com/emails', {
@@ -215,6 +225,16 @@ Deno.serve(async (req) => {
             to: profile.notif_email_address,
             subject: `Your balance: ${formatCurrency(balance)} (${isGain ? '+' : ''}${dailyChangePct.toFixed(2)}%) — ${formatMarketDay(asOfDate) || today} close`,
             html,
+            // Mailbox providers surface a native unsubscribe control from
+            // these, and weigh their presence when deciding whether to deliver.
+            ...(unsubscribeUrl
+              ? {
+                  headers: {
+                    'List-Unsubscribe': `<${unsubscribeUrl}>`,
+                    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+                  },
+                }
+              : {}),
           }),
         });
 
