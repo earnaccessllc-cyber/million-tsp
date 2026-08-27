@@ -80,6 +80,28 @@ export default function NotificationSettings() {
     </div>
   );
 
+  // The stored value is Eastern because the job compares against an ET clock,
+  // but people set it thinking in their own timezone — this has now caused two
+  // rounds of "why didn't it send when I asked?". Show what it means locally.
+  // Near a DST boundary this can be an hour out for times within an hour of the
+  // switch; it's a hint, not the schedule itself.
+  const localEmailTime = (() => {
+    const hhmm = prefs.notif_email_time;
+    if (!hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return null;
+    const [h, m] = hhmm.split(':').map(Number);
+    if (h > 23 || m > 59) return null;
+    const now = new Date();
+    // Find the UTC instant whose New York wall clock reads hh:mm today: take the
+    // naive UTC guess, then shift it by that instant's ET-to-UTC gap.
+    const naive = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+    const d = new Date(naive);
+    const etWall = new Date(d.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const utcWall = new Date(d.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const local = new Date(naive + (utcWall - etWall));
+    if (isNaN(local.getTime())) return null;
+    return local.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+  })();
+
   return (
     <div className="p-4 bg-card rounded-xl border border-border space-y-5">
       <div className="flex items-center gap-2 mb-1">
@@ -107,6 +129,14 @@ export default function NotificationSettings() {
             onChange={e => update('notif_email_time', e.target.value)}
             className="h-9 text-sm w-32"
           />
+          {/* The stored value is Eastern because the job compares against an ET
+              clock, but most people set it thinking in their own timezone — so
+              show what it actually means locally instead of making them convert. */}
+          {localEmailTime && (
+            <p className="text-[10px] text-muted-foreground">
+              {localEmailTime} your time · sends once the day's balance is in
+            </p>
+          )}
         </div>
       </div>
 
