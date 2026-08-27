@@ -32,6 +32,21 @@ function nthSundayOfMonth(year, month, n) {
   return d;
 }
 
+// Same holiday set the price jobs use, so "the update hasn't run yet" can be
+// told apart from "there is no update coming" on a weekend or holiday.
+const MARKET_HOLIDAYS = new Set([
+  '2025-01-01','2025-01-20','2025-02-17','2025-05-26','2025-06-19','2025-07-04','2025-09-01','2025-11-27','2025-12-25',
+  '2026-01-01','2026-01-19','2026-02-16','2026-05-25','2026-06-19','2026-07-03','2026-09-07','2026-11-26','2026-12-25',
+  '2027-01-01','2027-01-18','2027-02-15','2027-05-31','2027-06-18','2027-07-05','2027-09-06','2027-11-25','2027-12-24',
+]);
+
+function isMarketDay(dateStr) {
+  if (MARKET_HOLIDAYS.has(dateStr)) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return dow !== 0 && dow !== 6;
+}
+
 function formatCurrency(value) {
   const n = Number(value) || 0;
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -156,6 +171,24 @@ Deno.serve(async (req) => {
           .limit(1);
         const todayBal = (latestBals && latestBals.length > 0) ? latestBals[0] : null;
         const asOfDate = todayBal?.date || profile.balance_last_confirmed || today;
+
+        // The due time is "not before this", not "send now". It is set just
+        // after the price sheet publishes (~8:49pm Central), so on a market day
+        // the mail should carry that day's close — if the latest priced day
+        // still isn't today, pricing hasn't landed yet and this tick defers to
+        // the next one a few minutes later.
+        //
+        // Non-market days are exempt: no row is ever coming for a weekend or
+        // holiday, so gating there would suppress the mail rather than delay
+        // it. Those send the most recent close, labelled with its own date.
+        if (isMarketDay(today) && asOfDate !== today) {
+          results.push({
+            profile_id: profile.id,
+            skipped: true,
+            reason: `Waiting for ${today} pricing before emailing (latest priced ${asOfDate}, now ${currentHHMM})`,
+          });
+          continue;
+        }
 
         const balance = profile.total_balance_manual || 0;
         const dailyChange = todayBal?.daily_change || 0;
