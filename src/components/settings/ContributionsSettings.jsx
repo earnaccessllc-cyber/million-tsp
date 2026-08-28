@@ -5,12 +5,14 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import DrawerSelect from '@/components/common/DrawerSelect';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { ChevronDown, ChevronUp, Save, CheckCircle2, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   resolveContrib, calcAgencyMatch, pctToDollar, dollarToPct,
   PAY_PERIODS, IRS_LIMIT_2026, calcYTD
 } from '@/lib/contributionCalc';
+import { localDateString } from '@/lib/balanceUpdatedAt';
 
 export default function ContributionsSettings() {
   const { activeProfile, refreshProfiles } = useProfile();
@@ -30,6 +32,8 @@ export default function ContributionsSettings() {
       contrib_roth_mode: activeProfile.contrib_roth_mode || 'percent',
       contrib_roth_percent: activeProfile.contrib_roth_percent ?? '',
       contrib_roth_dollar: activeProfile.contrib_roth_dollar ?? '',
+      auto_credit_contributions: activeProfile.auto_credit_contributions === true,
+      contribution_posting_lag_days: activeProfile.contribution_posting_lag_days ?? 3,
     });
     setLoans((activeProfile.loans || []).map(l => ({ ...l })));
   }, [activeProfile?.id]);
@@ -80,6 +84,11 @@ export default function ContributionsSettings() {
   const effectiveAgencyType = isCSRS ? 'csrs' : local.agency_type;
   const agency = calcAgencyMatch(effectiveAgencyType, employeePct, salary, paySchedule);
   const totalPerPeriod = trad.dollar + roth.dollar + agency.matchDollar + (agency.auto1Dollar || 0);
+  // Loan repayments go back into the account alongside the contribution, so
+  // they are part of what a pay day would add to the balance. Approximate:
+  // the nightly job caps each payment at what's actually still owed.
+  const loanPerPeriod = loans.reduce((sum, l) => sum + (parseFloat(l.per_period_payment) || 0), 0);
+  const lagDays = Math.min(30, Math.max(0, Math.round(parseFloat(local.contribution_posting_lag_days)) || 0));
   const irsWarning = employeePct > 0 && salary > 0 && (trad.dollar + roth.dollar) * periods > IRS_LIMIT_2026;
 
   const switchMode = (type) => {
@@ -108,8 +117,20 @@ export default function ContributionsSettings() {
         per_period_payment: parseFloat(l.per_period_payment) || 0,
         repaid: parseFloat(l.repaid) || 0,
       }));
+    // contribution_credit_from is where the deposit queue starts paying out.
+    // Stamping it on the day crediting is switched on keeps the queue from
+    // reaching back into a pay period a reconciled balance already accounts
+    // for; it is left alone once set, so toggling off and on again doesn't
+    // replay periods that were already credited.
+    const enabling = local.auto_credit_contributions === true;
+    const creditFrom = enabling
+      ? (activeProfile.contribution_credit_from || localDateString())
+      : activeProfile.contribution_credit_from;
+
     await base44.entities.TSPProfile.update(activeProfile.id, {
       ...local,
+      contribution_posting_lag_days: lagDays,
+      contribution_credit_from: creditFrom,
       current_annual_salary: salary,
       contrib_traditional_percent: tradPct,
       contrib_traditional_dollar: tradDollar,
@@ -395,6 +416,58 @@ export default function ContributionsSettings() {
                 </div>
                 <p className="text-[10px] text-muted-foreground pt-1">
                   Agency match updates automatically when you change your contribution %.
+                </p>
+              </div>
+
+              {/* When the pay-period deposit reaches the balance.
+                  Payroll takes it on the pay date; TSP posts it a few business
+                  days later and buys units at that day's price. Crediting it on
+                  the pay date made the balance run ahead of tsp.gov until TSP
+                  caught up, so the lag is modelled explicitly rather than
+                  assumed away — and it is a real per-agency number, which is why
+                  it is editable rather than hardcoded. */}
+              <div className="bg-secondary/30 rounded-xl p-3 border border-border/50 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Track contributions automatically</p>
+                    <p className="text-xs text-muted-foreground">
+                      Add each pay period's deposit when TSP posts it
+                    </p>
+                  </div>
+                  <Switch
+                    checked={local.auto_credit_contributions === true}
+                    onCheckedChange={(v) => set('auto_credit_contributions', v)}
+                  />
+                </div>
+
+                {local.auto_credit_contributions && (
+                  <div className="flex items-center justify-between gap-3 pt-1 border-t border-border/50">
+                    <div>
+                      <Label htmlFor="posting-lag" className="text-xs">Posting delay</Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Business days from pay day to when it lands
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Input
+                        id="posting-lag"
+                        type="number"
+                        inputMode="numeric"
+                        min="0"
+                        max="30"
+                        className="w-16 h-8 text-center"
+                        value={local.contribution_posting_lag_days ?? 3}
+                        onChange={(e) => set('contribution_posting_lag_days', e.target.value)}
+                      />
+                      <span className="text-xs text-muted-foreground">days</span>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {local.auto_credit_contributions
+                    ? `About ${fmt(totalPerPeriod + loanPerPeriod)} comes out of each check. It lands in your balance ${lagDays === 0 ? 'on the pay date itself' : `${lagDays} business day${lagDays === 1 ? '' : 's'} later`}, bought at that day's share price — the same way TSP does it. Check your TSP transaction history: if the deposit shows up on a different day than this expects, change the number above and it will match from then on.`
+                    : 'Off: your balance moves only when fund prices move, and deposits appear when you reconcile against tsp.gov. Loan payoff progress is tracked either way.'}
                 </p>
               </div>
 
