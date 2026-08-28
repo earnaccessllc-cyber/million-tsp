@@ -5,6 +5,7 @@ import { base44 } from '@/api/base44Client';
 import OnboardingPrompt from '@/components/onboarding/OnboardingPrompt';
 import UpgradePrompt from '@/components/common/UpgradePrompt';
 import { useFeature } from '@/lib/proGating';
+import { getAccountBalance } from '@/lib/accountBalance';
 import VolatilityScore from '@/components/analytics/VolatilityScore';
 import InflationAdjusted from '@/components/analytics/InflationAdjusted';
 import ContributionOptimizer from '@/components/analytics/ContributionOptimizer';
@@ -38,7 +39,7 @@ export default function Analytics() {
 
   if (!activeProfile) return <OnboardingPrompt />;
   const selectedFunds = funds.filter(f => f.is_selected);
-  const totalBalance = selectedFunds.reduce((s, f) => s + (f.balance || 0), 0);
+  const totalBalance = getAccountBalance(activeProfile, funds);
 
   return (
     <div className="max-w-lg mx-auto px-4 pt-4 pb-6">

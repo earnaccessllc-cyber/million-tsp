@@ -10,6 +10,7 @@ import { Send, Bot, User, Sparkles, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatCurrency } from '@/lib/tspFunds';
 import { useProStatus } from '@/lib/proGating';
+import { getAccountBalance } from '@/lib/accountBalance';
 
 const SUGGESTED = [
   'Am I on track for retirement?',
@@ -42,7 +43,7 @@ export default function AICoach() {
 
   if (!activeProfile) return <OnboardingPrompt />;
 
-  const totalBalance = funds.filter(f => f.is_selected).reduce((s, f) => s + (f.balance || 0), 0);
+  const totalBalance = getAccountBalance(activeProfile, funds);
 
   const sendMessage = async (text) => {
     if (!text.trim() || loading) return;

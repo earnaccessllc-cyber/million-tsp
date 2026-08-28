@@ -21,6 +21,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Shield, DollarSign, Clock, Zap } from 'lucide-react';
 import UpgradePrompt from '@/components/common/UpgradePrompt';
 import { useFeature } from '@/lib/proGating';
+import { getAccountBalance } from '@/lib/accountBalance';
 
 export default function RetirementEnhanced() {
   const { activeProfile, refreshProfiles } = useProfile();
@@ -62,14 +63,7 @@ export default function RetirementEnhanced() {
   if (!activeProfile) return <OnboardingPrompt />;
 
   const mergedProfile = { ...activeProfile, ...pendingUpdates };
-  const selectedFunds = funds.filter(f => f.is_selected);
-  const fundsBalance = selectedFunds.reduce((sum, f) => sum + (f.balance || 0), 0);
-  const mfwBalance = activeProfile?.has_mfw ? (activeProfile?.mfw_balance || 0) : 0;
-  // Mirrors the Home screen's total exactly (MFW rides on top of the fund-only
-  // *and* opening-balance fallbacks) so goal progress/pace match across tabs.
-  const tspBalance = activeProfile?.total_balance_manual
-    ? activeProfile.total_balance_manual
-    : (fundsBalance > 0 ? fundsBalance : (activeProfile?.opening_balance || 0)) + mfwBalance;
+  const tspBalance = getAccountBalance(activeProfile, funds);
   const handleUpdate = (updates) => {
     pendingRef.current = { ...pendingRef.current, ...updates };
     setPendingUpdates(prev => ({ ...prev, ...updates }));

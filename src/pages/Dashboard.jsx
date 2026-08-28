@@ -12,6 +12,7 @@ import { isMarketDay } from '@/lib/marketDays';
 import UpgradePrompt from '@/components/common/UpgradePrompt';
 import GoalProgressBar from '@/components/dashboard/GoalProgressBar';
 import { useFeature } from '@/lib/proGating';
+import { getAccountBalance } from '@/lib/accountBalance';
 import PullToRefresh from '@/components/common/PullToRefresh';
 
 
@@ -56,15 +57,7 @@ export default function Dashboard() {
   if (!activeProfile) return null;
 
   const selectedFunds = funds.filter(f => f.is_selected);
-  const fundsBalance = selectedFunds.reduce((sum, f) => sum + (f.balance || 0), 0);
-  const mfwBalance = activeProfile?.has_mfw ? (activeProfile?.mfw_balance || 0) : 0;
-  const openingBalance = activeProfile?.opening_balance || 0;
-  const hasFundData = fundsBalance > 0;
-  // total_balance_manual is the grand total (MFW already included) once the user has set/confirmed it.
-  // Only add mfwBalance on top when falling back to a fund-only estimate that doesn't include MFW.
-  const totalBalance = activeProfile?.total_balance_manual
-    ? activeProfile.total_balance_manual
-    : (hasFundData ? fundsBalance : openingBalance) + mfwBalance;
+  const totalBalance = getAccountBalance(activeProfile, funds);
   const sortedBalances = [...dailyBalances]
     .filter(d => d.date && isMarketDay(d.date))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
