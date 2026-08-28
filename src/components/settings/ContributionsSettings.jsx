@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import DrawerSelect from '@/components/common/DrawerSelect';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { ChevronDown, ChevronUp, Save, CheckCircle2, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -30,6 +31,7 @@ export default function ContributionsSettings() {
       contrib_roth_mode: activeProfile.contrib_roth_mode || 'percent',
       contrib_roth_percent: activeProfile.contrib_roth_percent ?? '',
       contrib_roth_dollar: activeProfile.contrib_roth_dollar ?? '',
+      auto_credit_contributions: activeProfile.auto_credit_contributions === true,
     });
     setLoans((activeProfile.loans || []).map(l => ({ ...l })));
   }, [activeProfile?.id]);
@@ -80,6 +82,10 @@ export default function ContributionsSettings() {
   const effectiveAgencyType = isCSRS ? 'csrs' : local.agency_type;
   const agency = calcAgencyMatch(effectiveAgencyType, employeePct, salary, paySchedule);
   const totalPerPeriod = trad.dollar + roth.dollar + agency.matchDollar + (agency.auto1Dollar || 0);
+  // Loan repayments go back into the account alongside the contribution, so
+  // they are part of what a pay day would add to the balance. Approximate:
+  // the nightly job caps each payment at what's actually still owed.
+  const loanPerPeriod = loans.reduce((sum, l) => sum + (parseFloat(l.per_period_payment) || 0), 0);
   const irsWarning = employeePct > 0 && salary > 0 && (trad.dollar + roth.dollar) * periods > IRS_LIMIT_2026;
 
   const switchMode = (type) => {
@@ -395,6 +401,31 @@ export default function ContributionsSettings() {
                 </div>
                 <p className="text-[10px] text-muted-foreground pt-1">
                   Agency match updates automatically when you change your contribution %.
+                </p>
+              </div>
+
+              {/* Whether the nightly job credits this money to the balance on the
+                  pay date. TSP posts it days later, so crediting it on the pay
+                  date makes the app read high until TSP catches up. Off by
+                  default; exposed here because it is a real trade-off — seeing
+                  the deposit immediately, or matching tsp.gov exactly. */}
+              <div className="bg-secondary/30 rounded-xl p-3 border border-border/50">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Credit contributions on pay day</p>
+                    <p className="text-xs text-muted-foreground">
+                      Add this money to your balance the day you're paid
+                    </p>
+                  </div>
+                  <Switch
+                    checked={local.auto_credit_contributions === true}
+                    onCheckedChange={(v) => set('auto_credit_contributions', v)}
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+                  {local.auto_credit_contributions
+                    ? `Your balance will jump by about ${fmt(totalPerPeriod + loanPerPeriod)} on each pay day. TSP posts the deposit a few days later, so until it does your balance here will read higher than tsp.gov.`
+                    : 'Off: your balance moves only when fund prices move, and each deposit appears once TSP actually posts it — so the number here matches tsp.gov. Loan payoff progress is tracked either way.'}
                 </p>
               </div>
 

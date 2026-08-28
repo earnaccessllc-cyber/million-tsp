@@ -87,8 +87,11 @@ function parsePercent(str) {
 // Mirrors src/lib/contributionCalc.js's getPeriodsElapsed exactly, so "is this a
 // pay day" lines up with the same period boundaries the rest of the app already
 // uses for YTD math (14-day periods from Jan 1 for biweekly, calendar months for
-// monthly). Real TSP posting timing varies by agency/payroll provider with no
-// universal rule, so contributions post on the pay date itself.
+// monthly). This identifies the pay date, which is when payroll takes the money
+// — not when TSP posts it to the account, which is days later and varies by
+// agency and payroll provider with no universal rule. That gap is why the
+// balance is no longer credited here by default; see auto_credit_contributions
+// below.
 const PAY_PERIODS = { biweekly: 26, monthly: 12 };
 
 function periodsElapsed(date, paySchedule) {
@@ -299,9 +302,28 @@ Deno.serve(async (req) => {
         }
 
         const todayIsPayDay = isPayDay(etNow, profile.pay_schedule || 'biweekly', profile.pay_date_anchor);
-        const applyContributions = todayIsPayDay && !alreadyProcessedToday;
-        const loanResult = applyContributions ? calcLoanRepayments(profile) : { total: 0, updatedLoans: profile.loans };
-        const loanRepaymentAmount = loanResult.total;
+        const payDayNotYetRecorded = todayIsPayDay && !alreadyProcessedToday;
+
+        // Loan repayment tracking runs on the pay date whether or not the money
+        // is credited to the balance below. How much of a loan payroll has taken
+        // out of your pay is a fact about payroll; when TSP posts the deposit is
+        // a separate question, and only the second one is in doubt.
+        const loanResult = payDayNotYetRecorded ? calcLoanRepayments(profile) : { total: 0, updatedLoans: profile.loans };
+
+        // Whether that payroll money is added to the balance on the pay date.
+        //
+        // It used to be, unconditionally, and that was a standing source of
+        // drift against tsp.gov: this job credited the deposit the day it left
+        // the paycheck, while TSP posts it several days later. So the app read
+        // high by roughly one contribution for a few days each period, then
+        // snapped back when TSP caught up — same size, same direction, every
+        // period. Measured 2026-08-27: $330.07 ahead, against contributions
+        // plus match of $330.10.
+        //
+        // Off unless a profile opts in, so the balance moves only when prices
+        // move and the deposit appears when tsp.gov shows it.
+        const applyContributions = payDayNotYetRecorded && profile.auto_credit_contributions === true;
+        const loanRepaymentAmount = applyContributions ? loanResult.total : 0;
         const contributionAmount = (applyContributions ? calcPayPeriodContribution(profile) : 0) + loanRepaymentAmount;
 
         // Fallback weighting for distributing today's contribution across funds
@@ -444,7 +466,10 @@ Deno.serve(async (req) => {
           balance_last_confirmed: today,
           balance_last_confirmed_at: new Date().toISOString(),
         };
-        if (loanRepaymentAmount > 0) {
+        // loanResult.total, not loanRepaymentAmount: repayment progress is
+        // recorded on every pay day, including the ones where the deposit is
+        // deliberately not credited to the balance.
+        if (loanResult.total > 0) {
           profileUpdates.loans = loanResult.updatedLoans;
         }
         if (newTotalBalance > (profile.highest_balance || 0)) {
@@ -453,7 +478,7 @@ Deno.serve(async (req) => {
         }
         await adminClient.from('tsp_profiles').update(profileUpdates).eq('id', profile.id);
 
-        results.push({ profile_id: profile.id, success: true, newTotalBalance, dailyChange, contributionAmount, loanRepaymentAmount });
+        results.push({ profile_id: profile.id, success: true, newTotalBalance, dailyChange, contributionAmount, loanRepaymentAmount, loanRepaidTracked: loanResult.total });
       } catch (e) {
         results.push({ profile_id: profile.id, error: e.message });
       }
