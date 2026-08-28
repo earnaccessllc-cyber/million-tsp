@@ -1,13 +1,13 @@
 import React from 'react';
 import { Lock, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useProStatus } from '@/lib/proGating';
+import { useFeature, featureLabel, PLAN_NAME } from '@/lib/proGating';
 import { useCheckout } from '@/hooks/useCheckout';
 
 export default function ProGate({ feature, children }) {
-  const { isPro } = useProStatus();
+  const { allowed } = useFeature(feature);
   const { startCheckout, loading, error } = useCheckout();
-  if (isPro) return children;
+  if (allowed) return children;
 
   return (
     <div className="relative min-h-[200px] flex flex-col items-center justify-center p-8 rounded-2xl border border-dashed border-primary/30 bg-primary/5 text-center gap-4">
@@ -17,13 +17,15 @@ export default function ProGate({ feature, children }) {
       <div>
         <div className="flex items-center justify-center gap-1 mb-1">
           <Sparkles className="w-4 h-4 text-primary" />
-          <span className="text-sm font-bold text-primary">PRO Feature</span>
+          <span className="text-sm font-bold text-primary">{PLAN_NAME}</span>
         </div>
-        <p className="text-sm text-muted-foreground">Upgrade to unlock this feature and get the full TSP Tracker experience.</p>
+        <p className="text-sm text-muted-foreground">
+          {featureLabel(feature)} is included in {PLAN_NAME}. One-time payment, lifetime access.
+        </p>
       </div>
       <Button size="sm" className="gap-2" onClick={startCheckout} disabled={loading}>
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-        {loading ? 'Starting checkout…' : 'Upgrade to Pro'}
+        {loading ? 'Starting checkout…' : `Upgrade to ${PLAN_NAME}`}
       </Button>
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>

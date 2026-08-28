@@ -32,12 +32,36 @@ function nthSundayOfMonth(year, month, n) {
   return d;
 }
 
+// Same holiday set the price jobs use, so "the update hasn't run yet" can be
+// told apart from "there is no update coming" on a weekend or holiday.
+const MARKET_HOLIDAYS = new Set([
+  '2025-01-01','2025-01-20','2025-02-17','2025-05-26','2025-06-19','2025-07-04','2025-09-01','2025-11-27','2025-12-25',
+  '2026-01-01','2026-01-19','2026-02-16','2026-05-25','2026-06-19','2026-07-03','2026-09-07','2026-11-26','2026-12-25',
+  '2027-01-01','2027-01-18','2027-02-15','2027-05-31','2027-06-18','2027-07-05','2027-09-06','2027-11-25','2027-12-24',
+]);
+
+function isMarketDay(dateStr) {
+  if (MARKET_HOLIDAYS.has(dateStr)) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return dow !== 0 && dow !== 6;
+}
+
 function formatCurrency(value) {
   const n = Number(value) || 0;
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function buildEmailHtml({ name, balance, dailyChange, dailyChangePct, isGain, funds, mfwBalance }) {
+function formatMarketDay(dateStr) {
+  if (!dateStr) return null;
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+  });
+}
+
+function buildEmailHtml({ name, asOfDate, balance, dailyChange, dailyChangePct, isGain, funds, mfwBalance, unsubscribeUrl }) {
   const changeColor = isGain ? '#16a34a' : '#dc2626';
   const sign = dailyChange >= 0 ? '+' : '';
   const fundRows = funds.map(f => `
@@ -56,10 +80,10 @@ function buildEmailHtml({ name, balance, dailyChange, dailyChangePct, isGain, fu
     <p style="color:#666;margin:0 0 20px;">Here's your MillionTSP balance update.</p>
 
     <div style="background:#f7f7f8;border-radius:12px;padding:20px;margin-bottom:20px;">
-      <p style="margin:0;color:#666;font-size:13px;">Total Balance</p>
+      <p style="margin:0;color:#666;font-size:13px;">Total Balance${formatMarketDay(asOfDate) ? ` &middot; as of ${formatMarketDay(asOfDate)} close` : ''}</p>
       <p style="margin:4px 0 0;font-size:28px;font-weight:700;">${formatCurrency(balance)}</p>
       <p style="margin:6px 0 0;color:${changeColor};font-weight:600;">
-        ${sign}${formatCurrency(dailyChange)} (${sign}${dailyChangePct.toFixed(2)}%) today
+        ${sign}${formatCurrency(dailyChange)} (${sign}${dailyChangePct.toFixed(2)}%) that day
       </p>
     </div>
 
@@ -76,7 +100,7 @@ function buildEmailHtml({ name, balance, dailyChange, dailyChangePct, isGain, fu
     ${mfwBalance > 0 ? `<p style="color:#666;font-size:13px;">Mutual funds: ${formatCurrency(mfwBalance)}</p>` : ''}
 
     <p style="color:#999;font-size:12px;margin-top:24px;">
-      You're receiving this because nightly balance emails are turned on in your MillionTSP notification settings.
+      You're receiving this because nightly balance emails are turned on in your MillionTSP notification settings.${unsubscribeUrl ? `<br><a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a>` : ''}
     </p>
   </div>
   `;
@@ -132,26 +156,62 @@ Deno.serve(async (req) => {
           .eq('profile_id', profile.id)
           .eq('is_selected', true);
 
-        const { data: todayBal } = await adminClient
+        // The most recently priced market day at or before now. On a market
+        // day this should be today once pricing has landed (enforced just
+        // below); on a weekend or holiday it is the last close before it, which
+        // is what the mail then reports and labels.
+        const { data: latestBals } = await adminClient
           .from('daily_balances')
           .select('*')
           .eq('profile_id', profile.id)
-          .eq('date', today)
-          .maybeSingle();
+          .lte('date', today)
+          .order('date', { ascending: false })
+          .limit(1);
+        const todayBal = (latestBals && latestBals.length > 0) ? latestBals[0] : null;
+        const asOfDate = todayBal?.date || profile.balance_last_confirmed || today;
+
+        // The due time is "not before this", not "send now". It is set just
+        // after the price sheet publishes (~8:49pm Central), so on a market day
+        // the mail should carry that day's close — if the latest priced day
+        // still isn't today, pricing hasn't landed yet and this tick defers to
+        // the next one a few minutes later.
+        //
+        // Non-market days are exempt: no row is ever coming for a weekend or
+        // holiday, so gating there would suppress the mail rather than delay
+        // it. Those send the most recent close, labelled with its own date.
+        if (isMarketDay(today) && asOfDate !== today) {
+          results.push({
+            profile_id: profile.id,
+            skipped: true,
+            reason: `Waiting for ${today} pricing before emailing (latest priced ${asOfDate}, now ${currentHHMM})`,
+          });
+          continue;
+        }
 
         const balance = profile.total_balance_manual || 0;
         const dailyChange = todayBal?.daily_change || 0;
         const dailyChangePct = todayBal?.daily_change_percent || 0;
         const isGain = dailyChange >= 0;
 
+        // Base defaults to this project's own functions host, so the link works
+        // without extra configuration; override once mail moves to a verified
+        // domain so the link matches the sending domain.
+        const unsubBase = Deno.env.get('PUBLIC_UNSUBSCRIBE_URL')
+          || `${Deno.env.get('SUPABASE_URL')}/functions/v1/unsubscribe`;
+        const unsubscribeUrl = profile.unsubscribe_token
+          ? `${unsubBase}?token=${encodeURIComponent(profile.unsubscribe_token)}`
+          : null;
+
         const html = buildEmailHtml({
           name: profile.name,
+          asOfDate,
           balance,
           dailyChange,
           dailyChangePct,
           isGain,
           funds: allocations || [],
           mfwBalance: profile.has_mfw ? (profile.mfw_balance || 0) : 0,
+          unsubscribeUrl,
         });
 
         const emailRes = await fetch('https://api.resend.com/emails', {
@@ -163,8 +223,18 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             from: fromAddress,
             to: profile.notif_email_address,
-            subject: `Your balance: ${formatCurrency(balance)} (${isGain ? '+' : ''}${dailyChangePct.toFixed(2)}% today)`,
+            subject: `Your balance: ${formatCurrency(balance)} (${isGain ? '+' : ''}${dailyChangePct.toFixed(2)}%) — ${formatMarketDay(asOfDate) || today} close`,
             html,
+            // Mailbox providers surface a native unsubscribe control from
+            // these, and weigh their presence when deciding whether to deliver.
+            ...(unsubscribeUrl
+              ? {
+                  headers: {
+                    'List-Unsubscribe': `<${unsubscribeUrl}>`,
+                    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+                  },
+                }
+              : {}),
           }),
         });
 

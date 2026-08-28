@@ -16,7 +16,7 @@ import UpgradePrompt from '@/components/common/UpgradePrompt';
 import PlanStatusCard from '@/components/settings/PlanStatusCard';
 import { Button } from '@/components/ui/button';
 import { LogOut, Trash2, RotateCcw } from 'lucide-react';
-import { hasFullAccess } from '@/lib/trialUtils';
+import { useFeature } from '@/lib/proGating';
 import { motion } from 'framer-motion';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -30,7 +30,7 @@ export default function SettingsEnhanced() {
   const [resetting, setResetting] = useState(false);
 
   const setupComplete = !!activeProfile;
-  const isPaid = hasFullAccess(activeProfile);
+  const { allowed: isPaid } = useFeature('notifications');
 
   const handleResetAccount = async () => {
     setResetting(true);
@@ -74,7 +74,7 @@ export default function SettingsEnhanced() {
             <TaxEstimator />
           </>
         ) : (
-          <UpgradePrompt feature="Notifications, goals, and tax estimator" />
+          <UpgradePrompt feature="notifications" />
         )}
         <AppGuide />
 

@@ -1,8 +1,12 @@
 import React from 'react';
 import { Lock, Loader2 } from 'lucide-react';
 import { useCheckout } from '@/hooks/useCheckout';
+import { FEATURES, featureLabel, PLAN_NAME } from '@/lib/proGating';
 
+// `feature` is a key from the FEATURES registry, so the locked-feature copy
+// lives in one place. A raw string is still accepted for one-off callers.
 export default function UpgradePrompt({ feature = 'this feature' }) {
+  const label = FEATURES[feature] ? featureLabel(feature) : feature;
   const { startCheckout, loading, error } = useCheckout();
   return (
     <div className="flex flex-col items-center justify-center py-10 px-6 text-center rounded-xl border border-border bg-card gap-4">
@@ -10,9 +14,9 @@ export default function UpgradePrompt({ feature = 'this feature' }) {
         <Lock className="w-6 h-6" style={{ color: '#C9A832' }} />
       </div>
       <div>
-        <h3 className="font-bold text-base mb-1">MillionTSP Pro Feature</h3>
+        <h3 className="font-bold text-base mb-1">{PLAN_NAME}</h3>
         <p className="text-sm text-muted-foreground">
-          {feature} is included in Pro. Upgrade once for lifetime access — no subscription, no recurring fees.
+          {label} is included in {PLAN_NAME}. Upgrade once for lifetime access — no subscription, no recurring fees.
         </p>
       </div>
       <div className="w-full px-2">

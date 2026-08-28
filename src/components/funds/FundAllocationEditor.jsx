@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Save, CheckSquare, Square, CheckCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { localDateString } from '@/lib/balanceUpdatedAt';
 import { useProfile } from '@/context/ProfileContext';
 import { fetchLivePricesSheet } from '@/functions/fetchLivePricesSheet';
 import { useQueryClient } from '@tanstack/react-query';
@@ -153,7 +154,8 @@ export default function FundAllocationEditor({ profileId, funds, onSaved }) {
       });
     }
 
-    const nonMfwTotal = Math.max(0, totalManual - newMfwBal);
+    // No non-MFW subtotal is needed here any more: the total is derived from
+    // the funds rather than the funds being derived from the total.
 
     // Step 1: Fetch current closing prices from Google Sheet
     let livePrices = {};
@@ -168,33 +170,49 @@ export default function FundAllocationEditor({ profileId, funds, onSaved }) {
     }
 
     let verifiedTotal = 0;
-    const today = new Date().toISOString().split('T')[0];
+    // Local date, not UTC: toISOString() rolls over during the evening for US
+    // users and would stamp these prices with tomorrow's market day.
+    const today = localDateString();
 
     for (const a of allocations) {
-      const allocPct = (parseFloat(a.allocation_percent) || 0) / 100;
-
       // Get closing price from sheet or fallback to stored
       const sheetKey = FUND_NAME_TO_SHEET[a.fund_name];
       const sheetEntry = livePrices[sheetKey];
       const closingPrice = sheetEntry?.share_price ?? a.share_price ?? 0;
 
+      // The units this fund actually holds, recovered from the balance/price
+      // pair every writer of this table maintains (balance === shares x
+      // share_price). This is the holding; the dollar figure is just a valuation.
+      const storedPrice = parseFloat(a.share_price) || 0;
+      const storedBalance = parseFloat(a.dollar_balance) || 0;
+      const units = storedPrice > 0 ? storedBalance / storedPrice : 0;
+
+      const typedDollars = String(a.dollar_value ?? '').trim();
+      const hasExplicitDollars = a.entry_mode === 'dollar' && typedDollars !== '';
+
       let computedBalance = 0;
       let computedShares = a.shares || 0;
 
-      if (a.is_selected && nonMfwTotal > 0 && allocPct > 0) {
-        // Step 1: fund dollar balance = total × allocation %
-        computedBalance = nonMfwTotal * allocPct;
-        // Step 2: back-calculate shares = balance ÷ closing price
-        if (closingPrice > 0) {
-          computedShares = computedBalance / closingPrice;
-        }
-        verifiedTotal += computedBalance;
-      } else if (!a.is_selected) {
+      if (!a.is_selected) {
         computedBalance = 0;
         computedShares = 0;
+      } else if (hasExplicitDollars) {
+        // The user typed this fund's dollar balance outright — that's a direct
+        // statement of the holding, so take it and re-derive units from it.
+        computedBalance = parseFloat(typedDollars) || 0;
+        computedShares = closingPrice > 0 ? computedBalance / closingPrice : computedShares;
+        verifiedTotal += computedBalance;
       } else {
-        computedBalance = a.dollar_balance || 0;
-        computedShares = a.shares || 0;
+        // Percent entry says where NEW contributions go — it must never
+        // redistribute money already invested. Setting balance to
+        // allocation% x total did exactly that: it silently rewrote every
+        // fund's holding to match the stated percentages, discarding the real
+        // drift between funds that comes from their differing performance.
+        // Re-value the existing units at the new closing price instead, which
+        // is what the nightly job does and what a real TSP account does.
+        computedBalance = units > 0 ? units * closingPrice : storedBalance;
+        computedShares = units > 0 ? units : (a.shares || 0);
+        verifiedTotal += computedBalance;
       }
 
       const payload = {
@@ -223,21 +241,23 @@ export default function FundAllocationEditor({ profileId, funds, onSaved }) {
     // Invalidate so real data refreshes after optimistic update
     queryClient.invalidateQueries({ queryKey: fundKey });
 
-    // Step 3: Verify — re-add MFW for total display, and actually apply it as the current balance
+    // The total is the sum of the parts — the funds just re-valued at today's
+    // closing prices, plus MFW. It is never assumed and then divided back out.
     const grandTotal = verifiedTotal + newMfwBal;
     const diff = Math.abs(grandTotal - totalManual);
     if (verifiedTotal > 0) {
       await base44.entities.TSPProfile.update(activeProfile.id, {
         total_balance_manual: grandTotal,
         balance_last_confirmed: today,
+        balance_last_confirmed_at: new Date().toISOString(),
       });
       await refreshProfiles();
       setVerifyMsg(diff < 1
-        ? `✅ Shares calculated. Balance verified: $${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-        : `✅ Current balance updated to $${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} from live prices`);
+        ? `✅ Allocations saved. Balance re-valued at today's prices: $${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : `✅ Balance re-valued at today's closing prices: $${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
     }
 
-    toast({ title: 'Fund allocations saved', description: 'Shares back-calculated from closing prices and current balance updated.' });
+    toast({ title: 'Fund allocations saved', description: 'Holdings re-valued at closing prices. Percentages apply to future contributions.' });
     onSaved?.();
   };
 
