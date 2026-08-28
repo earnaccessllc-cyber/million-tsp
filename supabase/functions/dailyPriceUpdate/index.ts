@@ -84,35 +84,56 @@ function parsePercent(str) {
   return isNaN(val) ? null : val;
 }
 
-// Mirrors src/lib/contributionCalc.js's getPeriodsElapsed exactly, so "is this a
-// pay day" lines up with the same period boundaries the rest of the app already
-// uses for YTD math (14-day periods from Jan 1 for biweekly, calendar months for
-// monthly). This identifies the pay date, which is when payroll takes the money
-// — not when TSP posts it to the account, which is days later and varies by
-// agency and payroll provider with no universal rule. That gap is why the
-// balance is no longer credited here by default; see auto_credit_contributions
-// below.
 const PAY_PERIODS = { biweekly: 26, monthly: 12 };
 
-function periodsElapsed(date, paySchedule) {
-  const jan1 = new Date(date.getFullYear(), 0, 1);
-  const dayOfYear = Math.floor((date - jan1) / (1000 * 60 * 60 * 24));
-  if (paySchedule === 'monthly') return date.getMonth();
-  return Math.floor(dayOfYear / 14);
+// The most recent pay date on or before `dateStr`.
+//
+// This used to ask "is today a pay day", which isn't enough on its own: a pay
+// date can land on a weekend or a market holiday, and this job only runs on
+// market days, so a period whose pay date fell on one would be skipped
+// entirely and its deposit lost. Asking which pay period we are in instead
+// lets the first market day after the pay date pick it up.
+//
+// Period boundaries mirror src/lib/contributionCalc.js's getPeriodsElapsed, so
+// they line up with the YTD math the rest of the app already does: 14-day
+// blocks for biweekly, calendar months for monthly. A profile with a real known
+// pay date (pay_date_anchor) anchors the biweekly cycle to that instead —
+// agencies' actual pay calendars don't line up with a generic Jan-1 grid.
+function lastPayDateOnOrBefore(dateStr, paySchedule, anchorDateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const cur = new Date(Date.UTC(y, m - 1, d));
+
+  if (paySchedule === 'biweekly' && anchorDateStr) {
+    const [ay, am, ad] = String(anchorDateStr).split('-').map(Number);
+    const anchor = new Date(Date.UTC(ay, am - 1, ad));
+    const diffDays = Math.floor((cur - anchor) / 86400000);
+    if (diffDays < 0) return null;
+    cur.setUTCDate(cur.getUTCDate() - (((diffDays % 14) + 14) % 14));
+    return cur.toISOString().split('T')[0];
+  }
+
+  if (paySchedule === 'monthly') return `${y}-${String(m).padStart(2, '0')}-01`;
+
+  // Biweekly with no anchor: 14-day blocks from Jan 1.
+  const jan1 = new Date(Date.UTC(y, 0, 1));
+  const dayOfYear = Math.floor((cur - jan1) / 86400000);
+  jan1.setUTCDate(jan1.getUTCDate() + Math.floor(dayOfYear / 14) * 14);
+  return jan1.toISOString().split('T')[0];
 }
 
-// If the profile has a real known pay date (pay_date_anchor), use that to anchor
-// the biweekly cycle instead of assuming alignment to Jan 1 — agencies' actual
-// pay calendars don't line up with a generic Jan-1-based 14-day grid.
-function isPayDay(today, paySchedule, anchorDateStr) {
-  if (paySchedule === 'biweekly' && anchorDateStr) {
-    const anchor = new Date(anchorDateStr + 'T00:00:00');
-    const diffDays = Math.floor((today - anchor) / (1000 * 60 * 60 * 24));
-    return ((diffDays % 14) + 14) % 14 === 0;
+// TSP posts a deposit some business days after the pay date. Walking forward
+// over market days (rather than adding calendar days) means the result is
+// always a day this job actually runs, so a posting date can't land somewhere
+// nothing will pick it up.
+function addBusinessDays(dateStr, n) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const cur = new Date(Date.UTC(y, m - 1, d));
+  let added = 0;
+  while (added < n) {
+    cur.setUTCDate(cur.getUTCDate() + 1);
+    if (isMarketDay(cur.toISOString().split('T')[0])) added++;
   }
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  return periodsElapsed(today, paySchedule) !== periodsElapsed(yesterday, paySchedule);
+  return cur.toISOString().split('T')[0];
 }
 
 function resolveContribPctAndDollar(mode, pct, dollar, salary, periods) {
@@ -276,11 +297,12 @@ Deno.serve(async (req) => {
 
         // Re-valuing from unit counts (below) makes the price half of this job
         // idempotent — running it twice for the same market day lands on exactly
-        // the same balance. Contributions are the part that isn't: they buy new
-        // units and advance loan.repaid, so a second run for a day we've already
-        // processed would double-count them. This job is the only writer that
-        // INSERTS a daily_balances row (mfwPriceUpdate only adjusts one that's
-        // already there), so a row for `today` is an exact record of having run.
+        // the same balance. Deposits are idempotent by a different route: each
+        // one is a pending_contributions row, unique per pay date and marked
+        // posted once credited, so a re-run finds nothing due rather than buying
+        // the same units twice. This job is the only writer that INSERTS a
+        // daily_balances row (mfwPriceUpdate only adjusts one that's already
+        // there), so a row for `today` is an exact record of having run.
         const { data: existingBal } = await adminClient.from('daily_balances').select('*').eq('profile_id', profile.id).eq('date', today);
         const alreadyProcessedToday = !!(existingBal && existingBal.length > 0);
 
@@ -301,30 +323,86 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const todayIsPayDay = isPayDay(etNow, profile.pay_schedule || 'biweekly', profile.pay_date_anchor);
-        const payDayNotYetRecorded = todayIsPayDay && !alreadyProcessedToday;
-
-        // Loan repayment tracking runs on the pay date whether or not the money
-        // is credited to the balance below. How much of a loan payroll has taken
-        // out of your pay is a fact about payroll; when TSP posts the deposit is
-        // a separate question, and only the second one is in doubt.
-        const loanResult = payDayNotYetRecorded ? calcLoanRepayments(profile) : { total: 0, updatedLoans: profile.loans };
-
-        // Whether that payroll money is added to the balance on the pay date.
+        // Payroll takes the money on the pay date; TSP posts it to the account
+        // a few business days later, and buys units at the price on the day it
+        // posts. This job used to credit it on the pay date, which got both
+        // halves wrong: the balance ran ahead of tsp.gov until TSP caught up
+        // (measured 2026-08-27: $330.07 ahead, against contributions plus match
+        // of $330.10, snapping back when TSP posted), and the units were struck
+        // at the wrong day's price.
         //
-        // It used to be, unconditionally, and that was a standing source of
-        // drift against tsp.gov: this job credited the deposit the day it left
-        // the paycheck, while TSP posts it several days later. So the app read
-        // high by roughly one contribution for a few days each period, then
-        // snapped back when TSP caught up — same size, same direction, every
-        // period. Measured 2026-08-27: $330.07 ahead, against contributions
-        // plus match of $330.10.
+        // So a pay date now enqueues the deposit with the day it is expected to
+        // land, and the money is credited on or after that day instead. A queue
+        // rather than a "was there a pay day N days ago" test, because a row
+        // that stays unposted until it is actually credited cannot be silently
+        // dropped by a run that didn't happen, and can be read back when a
+        // number looks wrong.
+        const payDate = lastPayDateOnOrBefore(today, profile.pay_schedule || 'biweekly', profile.pay_date_anchor);
+
+        // The queue row is also the record of "payroll for this period has been
+        // accounted for" — one per profile per pay date, enforced by a unique
+        // constraint, so polling every couple of minutes can't process a period
+        // twice.
+        let payPeriodRow = null;
+        if (payDate) {
+          const { data: existingPay } = await adminClient
+            .from('pending_contributions')
+            .select('*')
+            .eq('profile_id', profile.id)
+            .eq('pay_date', payDate)
+            .limit(1);
+          payPeriodRow = (existingPay && existingPay.length > 0) ? existingPay[0] : null;
+        }
+        const payPeriodIsNew = !!payDate && !payPeriodRow;
+
+        // Loan repayment tracking advances when payroll takes the money, not
+        // when TSP posts it and not only when crediting is switched on. How much
+        // of a loan has come out of your pay is a fact about payroll; when the
+        // deposit reaches the account is a separate question, and only the
+        // second one is in doubt.
+        const loanResult = payPeriodIsNew ? calcLoanRepayments(profile) : { total: 0, updatedLoans: profile.loans };
+
+        if (payPeriodIsNew) {
+          const lagDays = Math.min(30, Math.max(0, Math.round(Number(profile.contribution_posting_lag_days ?? 3)) || 0));
+          // Amounts are struck from the profile as it stands on the pay date,
+          // not as it stands when the deposit posts, so a salary or contribution
+          // change while money is in flight can't retroactively rewrite what
+          // payroll already took.
+          const { error: enqueueError } = await adminClient.from('pending_contributions').upsert({
+            created_by_id: profile.created_by_id,
+            profile_id: profile.id,
+            pay_date: payDate,
+            post_date: addBusinessDays(payDate, lagDays),
+            contribution_amount: calcPayPeriodContribution(profile),
+            loan_repayment_amount: loanResult.total,
+          }, { onConflict: 'profile_id,pay_date', ignoreDuplicates: true });
+          if (enqueueError) throw enqueueError;
+        }
+
+        // What the queue says has landed. `lte(post_date, today)` rather than an
+        // equality test, so a deposit whose posting day this job missed is
+        // picked up on the next run instead of stranded.
         //
-        // Off unless a profile opts in, so the balance moves only when prices
-        // move and the deposit appears when tsp.gov shows it.
-        const applyContributions = payDayNotYetRecorded && profile.auto_credit_contributions === true;
-        const loanRepaymentAmount = applyContributions ? loanResult.total : 0;
-        const contributionAmount = (applyContributions ? calcPayPeriodContribution(profile) : 0) + loanRepaymentAmount;
+        // contribution_credit_from is where the queue starts paying out: rows
+        // are recorded for every pay period regardless, but only periods from
+        // the day crediting was switched on are ever credited. Without it,
+        // enabling this would immediately credit a period that a reconciled
+        // balance already accounts for.
+        const autoCredit = profile.auto_credit_contributions === true;
+        const creditFrom = profile.contribution_credit_from || null;
+        let duePending = [];
+        if (autoCredit && creditFrom) {
+          const { data: due } = await adminClient
+            .from('pending_contributions')
+            .select('*')
+            .eq('profile_id', profile.id)
+            .is('posted_at', null)
+            .gte('pay_date', creditFrom)
+            .lte('post_date', today);
+          duePending = due || [];
+        }
+        const loanRepaymentAmount = duePending.reduce((sum, r) => sum + (Number(r.loan_repayment_amount) || 0), 0);
+        const contributionAmount = duePending.reduce((sum, r) => sum + (Number(r.contribution_amount) || 0), 0) + loanRepaymentAmount;
 
         // Fallback weighting for distributing today's contribution across funds
         // when allocation_percent isn't set (dollar-entry profiles, or a selected
@@ -418,6 +496,18 @@ Deno.serve(async (req) => {
           }).eq('id', fund.id);
         }
 
+        // Mark the queue rows credited as soon as the units are bought, rather
+        // than after the balance write below: the fund_allocations updates above
+        // have already committed those units, so a bail-out further down must
+        // not leave the same deposit sitting due for the next run.
+        if (duePending.length > 0) {
+          const postedAt = new Date().toISOString();
+          await adminClient
+            .from('pending_contributions')
+            .update({ posted_on: today, posted_at: postedAt, updated_date: postedAt })
+            .in('id', duePending.map((r) => r.id));
+        }
+
         newTotalBalance += mfwBal;
 
         // Safety net: a single day's market move can't plausibly change the
@@ -466,9 +556,11 @@ Deno.serve(async (req) => {
           balance_last_confirmed: today,
           balance_last_confirmed_at: new Date().toISOString(),
         };
-        // loanResult.total, not loanRepaymentAmount: repayment progress is
-        // recorded on every pay day, including the ones where the deposit is
-        // deliberately not credited to the balance.
+        // loanResult.total is what payroll took this pay period;
+        // loanRepaymentAmount is what the queue paid into the balance today.
+        // They are different days, so progress keys off the first: a loan is
+        // paid down when the deduction leaves your check, not when TSP posts
+        // the deposit.
         if (loanResult.total > 0) {
           profileUpdates.loans = loanResult.updatedLoans;
         }
@@ -478,7 +570,12 @@ Deno.serve(async (req) => {
         }
         await adminClient.from('tsp_profiles').update(profileUpdates).eq('id', profile.id);
 
-        results.push({ profile_id: profile.id, success: true, newTotalBalance, dailyChange, contributionAmount, loanRepaymentAmount, loanRepaidTracked: loanResult.total });
+        results.push({
+          profile_id: profile.id, success: true, newTotalBalance, dailyChange,
+          contributionAmount, loanRepaymentAmount,
+          creditedPayDates: duePending.map((r) => r.pay_date),
+          enqueuedPayDate: payPeriodIsNew ? payDate : null,
+        });
       } catch (e) {
         results.push({ profile_id: profile.id, error: e.message });
       }
