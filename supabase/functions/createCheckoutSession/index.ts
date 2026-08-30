@@ -53,8 +53,8 @@ Deno.serve(async (req) => {
       }],
       client_reference_id: user.id,
       customer_email: user.email,
-      success_url: `${origin}/Settings?upgrade=success`,
-      cancel_url: `${origin}/Settings?upgrade=cancelled`,
+      success_url: `${origin}/settings?upgrade=success`,
+      cancel_url: `${origin}/settings?upgrade=cancelled`,
     });
 
     return jsonResponse({ url: session.url });
