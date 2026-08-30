@@ -9,13 +9,13 @@ export default function UpgradePrompt({ feature = 'this feature' }) {
   const label = FEATURES[feature] ? featureLabel(feature) : feature;
   const { startCheckout, loading, error } = usePurchase();
   return (
-    <div className="flex flex-col items-center justify-center py-10 px-6 text-center rounded-xl border border-border bg-card gap-4">
-      <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: 'rgba(201,168,50,0.12)', border: '1px solid rgba(201,168,50,0.3)' }}>
-        <Lock className="w-6 h-6" style={{ color: '#C9A832' }} />
+    <div className="flex flex-col items-center justify-center py-5 px-4 text-center rounded-xl border border-border bg-card gap-2">
+      <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: 'rgba(201,168,50,0.12)', border: '1px solid rgba(201,168,50,0.3)' }}>
+        <Lock className="w-4 h-4" style={{ color: '#C9A832' }} />
       </div>
       <div>
-        <h3 className="font-bold text-base mb-1">{PLAN_NAME}</h3>
-        <p className="text-sm text-muted-foreground">
+        <h3 className="font-bold text-sm mb-0.5">{PLAN_NAME}</h3>
+        <p className="text-xs text-muted-foreground">
           {label} is included in {PLAN_NAME}. Upgrade once for lifetime access — no subscription, no recurring fees.
         </p>
       </div>

@@ -13,7 +13,7 @@ function jsonResponse(body, status = 200) {
   });
 }
 
-// Creates a Stripe Checkout session for the one-time $14.99 lifetime-Pro
+// Creates a Stripe Checkout session for the one-time $19.99 lifetime-Pro
 // unlock. Called from the browser (PaywallScreen / UpgradePrompt) with the
 // signed-in user's session; the resulting Checkout URL is where we redirect
 // them. client_reference_id carries the user id through to stripeWebhook,
@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
 
     const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-11-20.acacia' });
 
-    const origin = req.headers.get('origin') || Deno.env.get('APP_URL') || 'https://milliontsp.netlify.app';
+    const origin = req.headers.get('origin') || Deno.env.get('APP_URL') || 'https://milliontsp.com';
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
         price_data: {
           currency: 'usd',
           product_data: { name: 'MillionTSP Pro — Lifetime Access' },
-          unit_amount: 1499,
+          unit_amount: 1999,
         },
         quantity: 1,
       }],

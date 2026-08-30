@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/lib/AuthContext';
 import { Eye, EyeOff, Shield } from 'lucide-react';
 
 function GoldInput({ type, placeholder, value, onChange, id, rightElement }) {
@@ -354,9 +355,15 @@ function ForgotPasswordScreen({ onGoLogin }) {
 export default function Login() {
   const [screen, setScreen] = useState('login'); // 'login' | 'signup' | 'forgot' | 'verify'
   const [verifyEmail, setVerifyEmail] = useState('');
+  const { checkUserAuth } = useAuth();
 
+  // Re-check the (now-established) Supabase session and let AuthContext flip
+  // isAuthenticated - this swaps straight to the app in place. A hard
+  // `window.location.href` reload here would re-fetch the whole site from
+  // the network, which inside the native WebView feels like being bounced
+  // out to the website instead of just landing on the dashboard.
   const handleAuthSuccess = () => {
-    window.location.href = '/';
+    checkUserAuth();
   };
 
   const handleGoVerify = (email) => {
