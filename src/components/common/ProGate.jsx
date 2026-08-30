@@ -2,11 +2,11 @@ import React from 'react';
 import { Lock, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useFeature, featureLabel, PLAN_NAME } from '@/lib/proGating';
-import { useCheckout } from '@/hooks/useCheckout';
+import { usePurchase } from '@/hooks/usePurchase';
 
 export default function ProGate({ feature, children }) {
   const { allowed } = useFeature(feature);
-  const { startCheckout, loading, error } = useCheckout();
+  const { startCheckout, loading, error } = usePurchase();
   if (allowed) return children;
 
   return (

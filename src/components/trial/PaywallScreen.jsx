@@ -1,7 +1,8 @@
 import React from 'react';
 import { CheckCircle, Zap, Shield, Target, TrendingUp, Calendar, Clock, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useCheckout } from '@/hooks/useCheckout';
+import { usePurchase } from '@/hooks/usePurchase';
+import { isNative, restorePurchases } from '@/lib/purchases';
 
 const PRO_FEATURES = [
   { icon: Calendar, text: 'Retirement countdown & eligibility' },
@@ -13,7 +14,17 @@ const PRO_FEATURES = [
 ];
 
 export default function PaywallScreen({ onContinueFree }) {
-  const { startCheckout, loading, error } = useCheckout();
+  const { startCheckout, loading, error } = usePurchase();
+  const [restoring, setRestoring] = React.useState(false);
+  const [restoreMessage, setRestoreMessage] = React.useState('');
+
+  const handleRestore = async () => {
+    setRestoring(true);
+    setRestoreMessage('');
+    const { success, reason } = await restorePurchases();
+    setRestoreMessage(success ? 'Purchase restored — welcome back!' : (reason || 'Restore failed.'));
+    setRestoring(false);
+  };
 
   return (
     <motion.div
@@ -53,7 +64,7 @@ export default function PaywallScreen({ onContinueFree }) {
           <p
             style={{ fontFamily: "'Exo 2',sans-serif", fontSize: 52, fontWeight: 900, color: '#FFD700', lineHeight: 1 }}
           >
-            $14.99
+            $19.99
           </p>
           <p className="text-xs text-muted-foreground mt-1">one-time · no subscription · forever</p>
         </div>
@@ -81,7 +92,7 @@ export default function PaywallScreen({ onContinueFree }) {
         >
           <p className="text-xs text-muted-foreground leading-relaxed">
             💡 <span className="text-foreground font-medium">DailyTSP charges $25 for less features.</span><br />
-            We charge <span style={{ color: '#FFD700', fontWeight: 700 }}>$14.99</span> for more.
+            We charge <span style={{ color: '#FFD700', fontWeight: 700 }}>$19.99</span> for more.
           </p>
         </div>
 
@@ -99,7 +110,7 @@ export default function PaywallScreen({ onContinueFree }) {
           }}
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          {loading ? 'Starting checkout…' : 'Get Lifetime Access — $14.99'}
+          {loading ? 'Starting checkout…' : 'Get Lifetime Access — $19.99'}
         </button>
         {error && <p className="text-center text-xs mb-3" style={{ color: '#f87171' }}>{error}</p>}
 
@@ -110,6 +121,20 @@ export default function PaywallScreen({ onContinueFree }) {
         >
           Continue with Free Plan (limited access)
         </button>
+
+        {/* Restore Purchases — native only; required by Apple for a paid unlock */}
+        {isNative() && (
+          <button
+            onClick={handleRestore}
+            disabled={restoring}
+            className="w-full py-2 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          >
+            {restoring ? 'Restoring…' : 'Restore Purchases'}
+          </button>
+        )}
+        {restoreMessage && (
+          <p className="text-center text-xs mt-1" style={{ color: '#C9A832' }}>{restoreMessage}</p>
+        )}
 
         <p className="text-center text-xs text-muted-foreground mt-4 opacity-50">
           Secure one-time payment. No hidden fees. No recurring charges.

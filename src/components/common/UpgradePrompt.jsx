@@ -1,13 +1,13 @@
 import React from 'react';
 import { Lock, Loader2 } from 'lucide-react';
-import { useCheckout } from '@/hooks/useCheckout';
+import { usePurchase } from '@/hooks/usePurchase';
 import { FEATURES, featureLabel, PLAN_NAME } from '@/lib/proGating';
 
 // `feature` is a key from the FEATURES registry, so the locked-feature copy
 // lives in one place. A raw string is still accepted for one-off callers.
 export default function UpgradePrompt({ feature = 'this feature' }) {
   const label = FEATURES[feature] ? featureLabel(feature) : feature;
-  const { startCheckout, loading, error } = useCheckout();
+  const { startCheckout, loading, error } = usePurchase();
   return (
     <div className="flex flex-col items-center justify-center py-10 px-6 text-center rounded-xl border border-border bg-card gap-4">
       <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: 'rgba(201,168,50,0.12)', border: '1px solid rgba(201,168,50,0.3)' }}>
@@ -27,7 +27,7 @@ export default function UpgradePrompt({ feature = 'this feature' }) {
           style={{ background: 'linear-gradient(135deg, #FFD700, #C9A832)', color: '#0a0a0a' }}
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          {loading ? 'Starting checkout…' : 'Get Lifetime Access — $14.99'}
+          {loading ? 'Starting checkout…' : 'Get Lifetime Access — $19.99'}
         </button>
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
