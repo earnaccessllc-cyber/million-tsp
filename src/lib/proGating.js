@@ -29,7 +29,7 @@ export const FEATURES = {
 
   // Pro — everything derived from the balance.
   goal_tracking:         { label: 'Goal tracking and the millionaire tracker', free: true },
-  dashboard_insights:    { label: 'Sick leave credits, YTD activity, and the gain/loss tracker', free: false },
+  dashboard_insights:    { label: 'Sick leave credits and YTD activity', free: false },
   daily_log:             { label: 'Daily balance history', free: false },
   retirement_countdown:  { label: 'Retirement countdown, savings streaks, and milestone tracking', free: false },
   retirement_benefits:   { label: 'FERS/CSRS eligibility rules, pension calculator, and income timeline', free: false },
@@ -42,7 +42,6 @@ export const FEATURES = {
   fire_calculator:       { label: 'The FIRE calculator', free: false },
   smart_rebalancing:     { label: 'Smart rebalancing', free: false },
   fitness_score:         { label: 'The financial fitness score', free: false },
-  advanced_fund_history: { label: 'Extended fund history', free: false },
 };
 
 export const PRO_FEATURES = Object.keys(FEATURES).filter(k => !FEATURES[k].free);

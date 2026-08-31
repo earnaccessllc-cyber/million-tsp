@@ -6,11 +6,11 @@ import { isNative, restorePurchases } from '@/lib/purchases';
 
 const PRO_FEATURES = [
   { icon: Calendar, text: 'Retirement countdown & eligibility' },
-  { icon: Target, text: 'Full goal tracking & projections' },
-  { icon: TrendingUp, text: 'YTD activity & gain/loss tracker' },
+  { icon: TrendingUp, text: 'Full daily balance history & YTD activity' },
   { icon: Shield, text: 'Sick leave credits & pension calculator' },
-  { icon: Zap, text: 'TSP loan, FIRE, and income timeline tools' },
-  { icon: Clock, text: 'SRS eligibility & annual summaries' },
+  { icon: Zap, text: 'TSP loan, FIRE calculator & income timeline' },
+  { icon: Target, text: 'Contribution optimizer, risk scoring & fund analytics' },
+  { icon: Clock, text: 'AI TSP coach, tax estimator & smart rebalancing' },
 ];
 
 export default function PaywallScreen({ onContinueFree }) {
