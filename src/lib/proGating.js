@@ -12,10 +12,11 @@ export const PLAN_NAME = 'MillionTSP Pro';
  * trial users that every other screen let in) and made "what do you actually
  * get for free?" unanswerable without reading six files.
  *
- * Free tier: daily balance tracking. The current balance, the day's change,
- * fund prices and allocations — the reason to open the app each evening. Plus
- * whatever is needed to set that up, since a free tier you can't configure is
- * not a free tier.
+ * Free tier: daily balance tracking and goal progress. The current balance,
+ * the day's change, fund prices and allocations, and progress toward a
+ * savings goal — the reason to open the app each evening. Plus whatever is
+ * needed to set that up, since a free tier you can't configure is not a free
+ * tier.
  *
  * Everything that interprets, projects, or plans from that balance is Pro.
  */
@@ -27,7 +28,7 @@ export const FEATURES = {
   account_setup:         { label: 'Account setup and balance entry', free: true },
 
   // Pro — everything derived from the balance.
-  goal_tracking:         { label: 'Goal tracking and the millionaire tracker', free: false },
+  goal_tracking:         { label: 'Goal tracking and the millionaire tracker', free: true },
   dashboard_insights:    { label: 'Sick leave credits, YTD activity, and the gain/loss tracker', free: false },
   daily_log:             { label: 'Daily balance history', free: false },
   retirement_countdown:  { label: 'Retirement countdown, savings streaks, and milestone tracking', free: false },
