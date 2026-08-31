@@ -20,7 +20,7 @@ function ObDateField({ label, value, onChange }) {
           border: `1.5px solid ${focused || value ? GOLD : 'rgba(255,255,255,0.1)'}`,
           boxShadow: focused ? '0 0 0 3px rgba(201,168,50,0.12)' : 'none',
           color: value ? GOLD_BRIGHT : 'rgba(255,255,255,0.3)',
-          fontFamily: "'Orbitron',monospace", fontSize: 13, fontWeight: 700,
+          fontFamily: "'Orbitron',monospace", fontSize: 16, fontWeight: 700,
           padding: '0 16px',
           colorScheme: 'dark',
         }}
@@ -93,7 +93,7 @@ function ObDollarField({ label, value, onChange, placeholder, helper, onKeyDown 
             border: `1.5px solid ${focused || hasVal ? GOLD : 'rgba(255,255,255,0.1)'}`,
             boxShadow: focused ? '0 0 0 3px rgba(201,168,50,0.12)' : 'none',
             color: hasVal ? GOLD_BRIGHT : 'rgba(255,255,255,0.3)',
-            fontFamily: "'Orbitron',monospace", fontSize: 15, fontWeight: 700,
+            fontFamily: "'Orbitron',monospace", fontSize: 16, fontWeight: 700,
             paddingLeft: 40, paddingRight: 16,
           }}
         />
