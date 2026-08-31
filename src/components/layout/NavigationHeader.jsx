@@ -5,7 +5,7 @@ import TSPWordmark from '@/components/branding/TSPWordmark';
 import { useAuth } from '@/lib/AuthContext';
 
 // Root pages — show logo. Sub-pages — show back button.
-const ROOT_PATHS = ['/', '/funds', '/retirement', '/analytics', '/ai-coach', '/settings'];
+const ROOT_PATHS = ['/', '/funds', '/retirement', '/analytics', '/settings'];
 
 const PAGE_TITLES = {
   '/funds/history': 'Price History',

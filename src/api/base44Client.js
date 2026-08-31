@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Drop-in replacement for src/api/base44Client.js. Exposes the same shape
-// (auth.*, entities.X.list/filter/create/update/delete, functions.invoke,
-// integrations.Core.*) so existing components don't need to change how they
-// call `base44` — only this file and the import path change.
+// (auth.*, entities.X.list/filter/create/update/delete, functions.invoke)
+// so existing components don't need to change how they call `base44` —
+// only this file and the import path change.
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -158,17 +158,5 @@ const functions = {
   },
 };
 
-const integrations = {
-  Core: {
-    // TODO(migration): Base44's built-in LLM proxy has no Supabase equivalent.
-    // Wire this to your own OpenAI/Anthropic key via a Supabase Edge Function
-    // (e.g. supabase/functions/invokeLLM) when ready — see AICoach.jsx for the
-    // one call site. Left as a clear placeholder per the plan to defer this.
-    async InvokeLLM() {
-      throw new Error('AI Coach is not yet wired up on Supabase — InvokeLLM needs an LLM API key configured in a backend function.');
-    },
-  },
-};
-
-export const base44 = { auth, entities, functions, integrations };
+export const base44 = { auth, entities, functions };
 export default base44;

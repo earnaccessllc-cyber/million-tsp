@@ -36,7 +36,6 @@ export const FEATURES = {
   retirement_tools:      { label: 'TSP loan calculator and planning tools', free: false },
   analytics:             { label: 'Contribution optimizer, risk scoring, inflation analysis, and fund comparison', free: false },
   notifications:         { label: 'Notifications, goals, and the tax estimator', free: false },
-  ai_coach:              { label: 'The AI TSP coach', free: false },
   tsp_vs_private:        { label: 'TSP vs. private sector comparison', free: false },
   tax_estimator:         { label: 'The tax estimator', free: false },
   fire_calculator:       { label: 'The FIRE calculator', free: false },
