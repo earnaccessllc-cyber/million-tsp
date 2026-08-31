@@ -21,7 +21,7 @@ export default function NavigationHeader({ notificationBell }) {
 
   return (
     <header
-      className="sticky top-0 z-40 flex items-center justify-between px-4"
+      className="relative z-40 flex items-center justify-between px-4"
       style={{
         height: 'calc(3.5rem + env(safe-area-inset-top, 0px))',
         paddingTop: 'env(safe-area-inset-top, 0px)',

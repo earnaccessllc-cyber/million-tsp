@@ -62,8 +62,8 @@ export default function MarketMood() {
   return (
     <div className="mb-4">
       <motion.div
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         className={`p-3 rounded-xl border ${mood.bgColor}`}
       >
         {/* Main mood row */}
