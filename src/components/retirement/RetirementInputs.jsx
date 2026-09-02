@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import DrawerSelect from '@/components/common/DrawerSelect';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Check, ChevronDown } from 'lucide-react';
-import { getFRA, getFRALabel } from '@/lib/retirementCalc';
+import { getFRA, getFRALabel, addYearsMonths } from '@/lib/retirementCalc';
+import { getMRA } from '@/lib/tspFunds';
 import SickLeaveInputs from '@/components/retirement/SickLeaveInputs';
 import DateDrawer from '@/components/common/DateDrawer';
 
@@ -29,27 +30,57 @@ export default function RetirementInputs({ profile, onUpdate }) {
   const handleChange = (field, value) => onUpdate({ [field]: value });
   const [ssDrawerOpen, setSsDrawerOpen] = useState(false);
 
-  // Auto-calculate planned retirement date (age 57 from date of birth)
+  // The default planned retirement date: the participant's Minimum Retirement
+  // Age, from the birth-year table.
+  //
+  // This was hardcoded to age 57, which is only correct for people born in 1970
+  // or later. An employee born 1953-1969 has an MRA between 56 and 56 years 10
+  // months, so the default sat up to a year past the date they could actually
+  // go — and contradicted the eligibility card immediately below it, which
+  // computes the same figure properly.
   const autoRetirementDate = useMemo(() => {
-    if (profile?.date_of_birth) {
-      const d = new Date(profile.date_of_birth);
-      d.setFullYear(d.getFullYear() + 57);
-      return d.toISOString().split('T')[0];
-    }
-    return '';
+    if (!profile?.date_of_birth) return '';
+    const dob = new Date(profile.date_of_birth);
+    const mra = getMRA(dob.getFullYear());
+    const years = Math.floor(mra);
+    const months = Math.round((mra - years) * 12);
+    return addYearsMonths(dob, years, months).toISOString().split('T')[0];
   }, [profile?.date_of_birth]);
 
-  // Auto-set planned retirement date to age 57 whenever date_of_birth changes
+  // Fill the date in when there isn't one — but never overwrite one the user
+  // picked.
+  //
+  // This effect runs on mount, and it used to write whenever the stored date
+  // differed from the default at all. So a deliberately chosen date — retiring
+  // at 62 for the 1.1% multiplier, say — was silently reset to the default
+  // every time this tab was opened, and saved back over on the next save. The
+  // helper text said "change anytime" while the code undid the change.
+  //
+  // A date is safe to replace only if this component is the one that put it
+  // there and the date of birth has since moved, so that correcting a birth
+  // date still carries an untouched default along with it.
+  const lastAutoRef = useRef(null);
   useEffect(() => {
     if (!autoRetirementDate) return;
-    if (profile?.planned_retirement_date !== autoRetirementDate) {
-      onUpdate({ planned_retirement_date: autoRetirementDate });
-    }
+    const stored = profile?.planned_retirement_date;
+    const isUntouchedDefault = !!stored && stored === lastAutoRef.current;
+    if (stored && !isUntouchedDefault) return;
+    if (stored === autoRetirementDate) return;
+    lastAutoRef.current = autoRetirementDate;
+    onUpdate({ planned_retirement_date: autoRetirementDate });
   }, [autoRetirementDate]);
 
   const plannedRetirementValue = profile?.planned_retirement_date || autoRetirementDate;
 
   const birthYear = profile?.date_of_birth ? new Date(profile.date_of_birth).getFullYear() : null;
+  // "56y 10m" rather than "56.83" — the MRA table is in years and months.
+  const mraLabel = useMemo(() => {
+    if (!birthYear) return '';
+    const mra = getMRA(birthYear);
+    const years = Math.floor(mra);
+    const months = Math.round((mra - years) * 12);
+    return months > 0 ? `${years}y ${months}mo` : `${years}`;
+  }, [birthYear]);
   const fraLabel = birthYear ? getFRALabel(birthYear) : 'Full Retirement Age (FRA)';
   // Spell out the actual FRA age next to "(at FRA)" so users who don't know what FRA stands
   // for still know which age to look up on their Social Security statement. Defaults to 67
@@ -115,7 +146,7 @@ export default function RetirementInputs({ profile, onUpdate }) {
         />
         <p className="text-[10px] text-muted-foreground mt-1">
           {!profile?.planned_retirement_date && profile?.date_of_birth
-            ? 'Defaulting to age 57 from your date of birth — change anytime'
+            ? `Defaulting to your MRA (${mraLabel}) from your date of birth — change anytime`
             : 'Leave blank to use today\'s date for calculations'}
         </p>
       </div>
