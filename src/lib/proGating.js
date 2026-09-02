@@ -12,10 +12,11 @@ export const PLAN_NAME = 'MillionTSP Pro';
  * trial users that every other screen let in) and made "what do you actually
  * get for free?" unanswerable without reading six files.
  *
- * Free tier: daily balance tracking. The current balance, the day's change,
- * fund prices and allocations — the reason to open the app each evening. Plus
- * whatever is needed to set that up, since a free tier you can't configure is
- * not a free tier.
+ * Free tier: daily balance tracking and goal progress. The current balance,
+ * the day's change, fund prices and allocations, and progress toward a
+ * savings goal — the reason to open the app each evening. Plus whatever is
+ * needed to set that up, since a free tier you can't configure is not a free
+ * tier.
  *
  * Everything that interprets, projects, or plans from that balance is Pro.
  */
@@ -27,21 +28,19 @@ export const FEATURES = {
   account_setup:         { label: 'Account setup and balance entry', free: true },
 
   // Pro — everything derived from the balance.
-  goal_tracking:         { label: 'Goal tracking and the millionaire tracker', free: false },
-  dashboard_insights:    { label: 'Sick leave credits, YTD activity, and the gain/loss tracker', free: false },
+  goal_tracking:         { label: 'Goal tracking and the millionaire tracker', free: true },
+  dashboard_insights:    { label: 'Sick leave credits and YTD activity', free: false },
   daily_log:             { label: 'Daily balance history', free: false },
   retirement_countdown:  { label: 'Retirement countdown, savings streaks, and milestone tracking', free: false },
   retirement_benefits:   { label: 'FERS/CSRS eligibility rules, pension calculator, and income timeline', free: false },
   retirement_tools:      { label: 'TSP loan calculator and planning tools', free: false },
   analytics:             { label: 'Contribution optimizer, risk scoring, inflation analysis, and fund comparison', free: false },
   notifications:         { label: 'Notifications, goals, and the tax estimator', free: false },
-  ai_coach:              { label: 'The AI TSP coach', free: false },
   tsp_vs_private:        { label: 'TSP vs. private sector comparison', free: false },
   tax_estimator:         { label: 'The tax estimator', free: false },
   fire_calculator:       { label: 'The FIRE calculator', free: false },
   smart_rebalancing:     { label: 'Smart rebalancing', free: false },
   fitness_score:         { label: 'The financial fitness score', free: false },
-  advanced_fund_history: { label: 'Extended fund history', free: false },
 };
 
 export const PRO_FEATURES = Object.keys(FEATURES).filter(k => !FEATURES[k].free);

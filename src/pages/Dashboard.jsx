@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useProfile } from '@/context/ProfileContext';
 import BalanceHero from '@/components/dashboard/BalanceHero';
 import YTDActivity from '@/components/dashboard/YTDActivity';
-import GainLossTracker from '@/components/dashboard/GainLossTracker';
 import MarketMood from '@/components/funds/MarketMood';
 import SickLeaveCard from '@/components/dashboard/SickLeaveCard';
 import RetirementCountdown from '@/components/retirement/RetirementCountdown';
@@ -104,7 +103,6 @@ export default function Dashboard() {
         <>
           <SickLeaveCard profile={activeProfile} tspBalance={totalBalance} />
           <YTDActivity profile={activeProfile} totalBalance={totalBalance} />
-          <GainLossTracker dailyBalances={dailyBalances} />
         </>
       ) : (
         <div className="mx-4 mt-4">

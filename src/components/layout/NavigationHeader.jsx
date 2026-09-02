@@ -5,7 +5,7 @@ import TSPWordmark from '@/components/branding/TSPWordmark';
 import { useAuth } from '@/lib/AuthContext';
 
 // Root pages — show logo. Sub-pages — show back button.
-const ROOT_PATHS = ['/', '/funds', '/retirement', '/analytics', '/ai-coach', '/settings'];
+const ROOT_PATHS = ['/', '/funds', '/retirement', '/analytics', '/settings'];
 
 const PAGE_TITLES = {
   '/funds/history': 'Price History',
@@ -21,7 +21,7 @@ export default function NavigationHeader({ notificationBell }) {
 
   return (
     <header
-      className="sticky top-0 z-40 flex items-center justify-between px-4"
+      className="relative z-40 flex items-center justify-between px-4"
       style={{
         height: 'calc(3.5rem + env(safe-area-inset-top, 0px))',
         paddingTop: 'env(safe-area-inset-top, 0px)',

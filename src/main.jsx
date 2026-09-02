@@ -2,6 +2,10 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import '@/index.css'
 import ErrorBoundary, { CrashScreen } from '@/ErrorBoundary.jsx'
+import { initPurchases } from '@/lib/purchases'
+
+// Configure RevenueCat as early as possible on native platforms; no-op on web.
+initPurchases()
 
 const root = ReactDOM.createRoot(document.getElementById('root'))
 

@@ -67,7 +67,7 @@ function FundRow({ fund, checked, pct, onCheck, onPct }) {
             value={pct}
             onChange={e => onPct(e.target.value)}
             placeholder=""
-            className="w-16 bg-background border border-border rounded px-2 py-1 text-sm text-right text-foreground focus:outline-none focus:border-primary"
+            className="w-16 bg-background border border-border rounded px-2 py-1 text-base text-right text-foreground focus:outline-none focus:border-primary"
           />
           <span className="text-xs text-muted-foreground">%</span>
         </div>
@@ -311,7 +311,7 @@ export default function AccountSetupForm() {
                   value={mfwPct}
                   onChange={e => setMfwPct(e.target.value)}
                   placeholder=""
-                  className="w-16 bg-background border border-border rounded px-2 py-1 text-sm text-right focus:outline-none focus:border-primary"
+                  className="w-16 bg-background border border-border rounded px-2 py-1 text-base text-right focus:outline-none focus:border-primary"
                 />
                 <span className="text-xs text-muted-foreground">% of total</span>
               </div>

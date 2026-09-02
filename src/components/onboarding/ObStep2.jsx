@@ -51,7 +51,7 @@ function FundRow({ name, color, selected, pct, onToggle, onPctChange }) {
               background: INPUT_BG,
               border: `1.5px solid rgba(201,168,50,0.35)`,
               color: GOLD_BRIGHT,
-              fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700,
+              fontFamily: "'Orbitron',monospace", fontSize: 16, fontWeight: 700,
               padding: '0 8px',
             }}
           />
@@ -140,7 +140,7 @@ export default function ObStep2({ form, update, onNext, onBack }) {
                 <div className="flex items-center gap-1">
                   <input type="number" min="0" max="100" step="1" value={form.mfw_pct || ''} onChange={e => update('mfw_pct', e.target.value)} placeholder="0"
                     className="outline-none text-right"
-                    style={{ width: 52, height: 32, borderRadius: 8, background: INPUT_BG, border: '1.5px solid rgba(201,168,50,0.35)', color: GOLD_BRIGHT, fontFamily: "'Orbitron',monospace", fontSize: 12, fontWeight: 700, padding: '0 8px' }} />
+                    style={{ width: 52, height: 32, borderRadius: 8, background: INPUT_BG, border: '1.5px solid rgba(201,168,50,0.35)', color: GOLD_BRIGHT, fontFamily: "'Orbitron',monospace", fontSize: 16, fontWeight: 700, padding: '0 8px' }} />
                   <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 11, color: '#AAAAAA' }}>%</span>
                 </div>
               ) : (
@@ -154,7 +154,7 @@ export default function ObStep2({ form, update, onNext, onBack }) {
                   <span className="absolute left-2 top-1/2 -translate-y-1/2" style={{ fontFamily: "'Orbitron',monospace", fontSize: 11, color: GOLD }}>$</span>
                   <input type="text" inputMode="decimal" value={form.mfw_balance || ''} onChange={e => update('mfw_balance', formatCurrency(e.target.value))} placeholder="0.00"
                     className="outline-none"
-                    style={{ height: 32, width: 120, borderRadius: 8, background: INPUT_BG, border: '1.5px solid rgba(201,168,50,0.3)', color: GOLD_BRIGHT, fontFamily: "'Orbitron',monospace", fontSize: 11, fontWeight: 700, paddingLeft: 20, paddingRight: 8 }} />
+                    style={{ height: 32, width: 120, borderRadius: 8, background: INPUT_BG, border: '1.5px solid rgba(201,168,50,0.3)', color: GOLD_BRIGHT, fontFamily: "'Orbitron',monospace", fontSize: 16, fontWeight: 700, paddingLeft: 20, paddingRight: 8 }} />
                 </div>
               </div>
             )}
