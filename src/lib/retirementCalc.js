@@ -205,6 +205,74 @@ export function getSickLeaveCredit(hours) {
 }
 
 /**
+ * High-3: the average of the three salary years entered, falling back to
+ * current salary until they are.
+ */
+export function calcHigh3(profile) {
+  const salaries = [profile?.salary_year_1, profile?.salary_year_2, profile?.salary_year_3].filter(s => s > 0);
+  if (salaries.length > 0) return salaries.reduce((a, b) => a + b, 0) / salaries.length;
+  return profile?.current_annual_salary || 0;
+}
+
+/**
+ * The annuity this profile would earn retiring on a given date.
+ *
+ * Split out of calcRetirement so that "what if I stayed two more years" is
+ * answered by the same formula that produces the headline number, rather than
+ * a second copy of it that can drift. calcRetirement calls this for the planned
+ * date; RetirementAgeComparison calls it for a range of dates.
+ *
+ * @param profile         the tsp_profiles row
+ * @param retirementDate  the date to value the annuity at
+ */
+export function calcAnnuityAt(profile, retirementDate) {
+  const dob = profile?.date_of_birth ? new Date(profile.date_of_birth) : null;
+  const careerStart = profile?.career_start_date ? new Date(profile.career_start_date) : null;
+  if (!dob || !careerStart || !retirementDate) return null;
+
+  const ageAtRetirement = calcAgeAt(dob, retirementDate);
+  const yearsOfService = calcYearsOfService(careerStart, retirementDate);
+
+  // Sick leave is added to creditable service for the annuity computation, and
+  // counts toward the 20-year threshold for the 1.1% multiplier — but never
+  // toward eligibility, which is why it is applied here and not in
+  // calcEarliestFERSRetirement.
+  const sickLeaveHours = profile.sick_leave_estimated_hours || profile.sick_leave_current_hours || 0;
+  const sickLeaveYears = sickLeaveToYears(sickLeaveHours);
+  const totalCreditableService = yearsOfService + sickLeaveYears;
+
+  const high3 = calcHigh3(profile);
+
+  let annualPension = 0;
+  let pensionFormula = '';
+  let multiplier = 0;
+
+  if (profile.retirement_system === 'FERS') {
+    multiplier = (ageAtRetirement >= 62 && totalCreditableService >= 20) ? 0.011 : 0.01;
+    annualPension = multiplier * totalCreditableService * high3;
+    pensionFormula = `${(multiplier * 100).toFixed(1)}% × ${totalCreditableService.toFixed(2)} yrs × High-3`;
+  } else {
+    const yos = Math.min(totalCreditableService, 41.11);
+    if (yos <= 5) annualPension = 0.015 * yos * high3;
+    else if (yos <= 10) annualPension = (0.015 * 5 + 0.0175 * (yos - 5)) * high3;
+    else annualPension = (0.015 * 5 + 0.0175 * 5 + 0.02 * (yos - 10)) * high3;
+    pensionFormula = 'CSRS tiered formula';
+  }
+
+  return {
+    annualPension,
+    monthlyPension: annualPension / 12,
+    pensionFormula,
+    multiplier,
+    high3,
+    ageAtRetirement,
+    yearsOfService,
+    sickLeaveYears,
+    totalCreditableService,
+  };
+}
+
+/**
  * Main retirement calculation function
  * Uses planned retirement date if available, otherwise current date
  */
@@ -227,34 +295,10 @@ export function calcRetirement(profile, tspBalance) {
 
   // Sick leave credit (pension calculation only, not eligibility)
   const sickLeaveHours = profile.sick_leave_estimated_hours || profile.sick_leave_current_hours || 0;
-  const sickLeaveYears = sickLeaveToYears(sickLeaveHours);
   const sickLeaveCredit = getSickLeaveCredit(sickLeaveHours);
-  const totalCreditableService = yearsOfService + sickLeaveYears;
 
-  // High-3 calculation
-  const salaries = [profile.salary_year_1, profile.salary_year_2, profile.salary_year_3].filter(s => s > 0);
-  const high3 = salaries.length > 0
-    ? salaries.reduce((a, b) => a + b, 0) / salaries.length
-    : profile.current_annual_salary || 0;
-
-  // Pension calculation — use totalCreditableService (includes sick leave)
-  let annualPension = 0;
-  let pensionFormula = '';
-
-  if (profile.retirement_system === 'FERS') {
-    // Sick leave counts toward the 20-year threshold for the 1.1% multiplier — it's part of
-    // total creditable service used throughout the annuity computation (just not for eligibility).
-    const multiplier = (ageAtRetirement >= 62 && totalCreditableService >= 20) ? 0.011 : 0.01;
-    annualPension = multiplier * totalCreditableService * high3;
-    pensionFormula = `${(multiplier * 100).toFixed(1)}% × ${totalCreditableService.toFixed(2)} yrs × High-3`;
-  } else {
-    const yos = Math.min(totalCreditableService, 41.11);
-    if (yos <= 5) annualPension = 0.015 * yos * high3;
-    else if (yos <= 10) annualPension = (0.015 * 5 + 0.0175 * (yos - 5)) * high3;
-    else annualPension = (0.015 * 5 + 0.0175 * 5 + 0.02 * (yos - 10)) * high3;
-    pensionFormula = 'CSRS tiered formula';
-  }
-  const monthlyPension = annualPension / 12;
+  const annuity = calcAnnuityAt(profile, retirementDate);
+  const { sickLeaveYears, totalCreditableService, high3, annualPension, monthlyPension, pensionFormula } = annuity;
 
   // Earliest retirement
   const mra = getMRA(birthYear);

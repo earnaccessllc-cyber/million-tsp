@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useProfile } from '@/context/ProfileContext';
 import RetirementInputs from '@/components/retirement/RetirementInputs';
+import RetirementAgeComparison from '@/components/retirement/RetirementAgeComparison';
 import PensionCalculator from '@/components/retirement/PensionCalculator';
 import RetirementCountdown from '@/components/retirement/RetirementCountdown';
 import RetirementEligibility from '@/components/retirement/RetirementEligibility';
@@ -149,6 +150,10 @@ export default function RetirementEnhanced() {
                 </div>
                 <RetirementEligibility profile={mergedProfile} />
                 <PensionCalculator profile={mergedProfile} tspBalance={tspBalance} />
+                <RetirementAgeComparison
+                  profile={mergedProfile}
+                  onSelectDate={(date) => handleUpdate({ planned_retirement_date: date })}
+                />
                 <IncomeTimeline profile={mergedProfile} tspBalance={tspBalance} />
               </>
             )}
