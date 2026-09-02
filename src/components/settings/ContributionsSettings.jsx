@@ -4,6 +4,7 @@ import { useProfile } from '@/context/ProfileContext';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import DrawerSelect from '@/components/common/DrawerSelect';
+import DateDrawer from '@/components/common/DateDrawer';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { ChevronDown, ChevronUp, Save, CheckCircle2, RefreshCw } from 'lucide-react';
@@ -34,6 +35,7 @@ export default function ContributionsSettings() {
       contrib_roth_dollar: activeProfile.contrib_roth_dollar ?? '',
       auto_credit_contributions: activeProfile.auto_credit_contributions === true,
       contribution_posting_lag_days: activeProfile.contribution_posting_lag_days ?? 3,
+      pay_date_anchor: activeProfile.pay_date_anchor || '',
     });
     setLoans((activeProfile.loans || []).map(l => ({ ...l })));
   }, [activeProfile?.id]);
@@ -55,6 +57,20 @@ export default function ContributionsSettings() {
   const salary = parseFloat(local.current_annual_salary) || 0;
   const paySchedule = local.pay_schedule || 'biweekly';
   const periods = PAY_PERIODS[paySchedule] || 26;
+
+  // Echo the next pay day back, so a mistyped anchor is obvious immediately
+  // rather than showing up weeks later as a deposit on the wrong day.
+  const nextPayDay = (() => {
+    if (paySchedule !== 'biweekly' || !local.pay_date_anchor) return null;
+    const [y, m, d] = String(local.pay_date_anchor).split('-').map(Number);
+    if (!y || !m || !d) return null;
+    const anchor = Date.UTC(y, m - 1, d);
+    const today = new Date();
+    const todayUTC = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+    const periodsSince = Math.floor((todayUTC - anchor) / (14 * 86400000));
+    const next = new Date(anchor + (periodsSince + 1) * 14 * 86400000);
+    return next.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  })();
 
   // Coerce blank inputs to 0 for calculations while keeping the fields visually empty
   const tradPct = parseFloat(local.contrib_traditional_percent) || 0;
@@ -217,6 +233,30 @@ export default function ContributionsSettings() {
                   ]}
                 />
               </div>
+
+              {/* Which day the fortnight lands on.
+                  Without this, biweekly pay periods are counted as 14-day blocks
+                  from January 1 — a grid no real pay calendar lines up with, so
+                  the app's idea of "pay day" could sit a day or several off the
+                  actual one, and both the YTD contribution count and the deposit
+                  queue inherited the error. One real pay date pins the whole
+                  cycle. */}
+              {paySchedule === 'biweekly' && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Most Recent Pay Day</Label>
+                  <DateDrawer
+                    value={local.pay_date_anchor || ''}
+                    onChange={v => set('pay_date_anchor', v)}
+                    max={new Date().toISOString().split('T')[0]}
+                    className={`mt-1 ${local.pay_date_anchor ? '' : 'ring-2 ring-amber-500/60'}`}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {nextPayDay
+                      ? `Every 14 days from here — next pay day ${nextPayDay}.`
+                      : 'Any recent pay day. Everything else counts forward and back in 14-day steps from it.'}
+                  </p>
+                </div>
+              )}
 
               {/* Traditional */}
               <ContribField
