@@ -190,3 +190,37 @@ body {
 .gold-glow-text {
   text-shadow: 0 0 20px rgba(201, 168, 50, 0.5);
 }
+/* Native date and time inputs size themselves.
+   iOS Safari applies its own appearance to input[type="date"]: extra vertical
+   padding that overrides the height every other field uses, an intrinsic width
+   wider than the text it holds, and centred text. Next to a money field of the
+   same markup the date box came out visibly taller and wider, which is why the
+   loan rows never lined up.
+   Turning the native appearance off lets the shared input styles apply, so a
+   date field is the same box as the one beside it. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 0;
+  text-align: left;
+}
+
+/* Safari wraps the value in its own element, which carries margins and its own
+   line box — the remaining source of the height difference. */
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+  min-height: 0;
+  line-height: normal;
+}
+
+/* Keep the picker button at the trailing edge instead of letting it sit inline
+   and push the field wider. */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  margin: 0 0 0 auto;
+  padding: 0;
+}
