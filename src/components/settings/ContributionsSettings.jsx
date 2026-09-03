@@ -328,8 +328,11 @@ export default function ContributionsSettings() {
                           Remove
                         </button>
                       </div>
+                      {/* min-w-0: grid items default to min-width:auto and won't shrink
+                          below their content, which is how the fields below used to spill
+                          out of their columns on a phone. */}
                       <div className="grid grid-cols-2 gap-3">
-                        <div>
+                        <div className="min-w-0">
                           <Label className="text-xs text-muted-foreground">Original amount</Label>
                           <div className="relative mt-1">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
@@ -338,12 +341,12 @@ export default function ContributionsSettings() {
                               placeholder="0"
                               value={loan.original_amount}
                               onChange={e => updateLoan(idx, 'original_amount', e.target.value)}
-                              className="h-9 text-sm pl-6"
+                              className="h-9 text-sm pl-6 w-full min-w-0"
                             />
                           </div>
                         </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Amount per pay period</Label>
+                        <div className="min-w-0">
+                          <Label className="text-xs text-muted-foreground">Per pay period</Label>
                           <div className="relative mt-1">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                             <Input
@@ -351,54 +354,57 @@ export default function ContributionsSettings() {
                               placeholder="0"
                               value={loan.per_period_payment}
                               onChange={e => updateLoan(idx, 'per_period_payment', e.target.value)}
-                              className="h-9 text-sm pl-6"
+                              className="h-9 text-sm pl-6 w-full min-w-0"
                             />
                           </div>
                         </div>
                       </div>
-                      {/* min-w-0 on both cells: a grid item defaults to min-width:auto,
-                          which refuses to shrink below its content. A native date input
-                          reports a wide intrinsic size on mobile, so without this the
-                          date field overflowed its column and sat underneath the money
-                          field next to it. */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="min-w-0">
-                          <Label className="text-xs text-muted-foreground">Loan Start Date</Label>
-                          <Input
-                            type="date"
-                            value={loan.start_date || ''}
-                            onChange={e => updateLoan(idx, 'start_date', e.target.value)}
-                            className="h-9 text-sm mt-1 w-full min-w-0"
-                          />
-                        </div>
-                        {/* Paid off so far fills itself in from the start date and the
-                            per-period payment — that is the normal case, and it is shown
-                            as a real value rather than a placeholder so the number is
-                            visible without anyone having to work it out. Typing replaces
-                            it with an override, for what the calculation can't know
-                            (extra payments, a payroll gap); clearing the box hands it
-                            back to the calculation. */}
-                        <div className="min-w-0">
+                      {/* Date and money fields don't share a row.
+                          A native date input reports a wide intrinsic size on mobile and
+                          renders its own formatted text, so at half a phone's width it
+                          crowded the field beside it — and because a grid item won't
+                          shrink below its content (min-width:auto), it overflowed its
+                          column and sat underneath. Two full-width rows are simply the
+                          right shape for these two: the date needs the room, and the
+                          paid-off figure has a line of explanation under it. */}
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Loan Start Date</Label>
+                        <Input
+                          type="date"
+                          value={loan.start_date || ''}
+                          onChange={e => updateLoan(idx, 'start_date', e.target.value)}
+                          className="h-9 text-sm mt-1 w-full min-w-0 block text-left"
+                        />
+                      </div>
+
+                      {/* Paid off so far fills itself in from the start date and the
+                          per-period payment — that is the normal case, and it is shown as
+                          a real value rather than a placeholder so the number is visible
+                          without anyone having to work it out. Typing replaces it with an
+                          override, for what the calculation can't know (extra payments, a
+                          payroll gap); clearing the box hands it back to the calculation. */}
+                      <div>
+                        <div className="flex items-baseline justify-between gap-2">
                           <Label className="text-xs text-muted-foreground">Paid off so far</Label>
-                          <div className="relative mt-1">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                            <Input
-                              type="number"
-                              placeholder="0"
-                              value={
-                                progress?.isOverridden
-                                  ? loan.repaid
-                                  : (progress ? progress.derived.toFixed(2) : '')
-                              }
-                              onChange={e => updateLoan(idx, 'repaid', e.target.value)}
-                              className={`h-9 text-sm pl-6 w-full min-w-0 ${progress?.isOverridden ? '' : 'text-muted-foreground'}`}
-                            />
-                          </div>
-                          <p className="text-[10px] text-muted-foreground mt-1">
+                          <span className="text-[10px] text-muted-foreground shrink-0">
                             {progress?.isOverridden
                               ? 'Manual — clear to recalculate'
                               : `Auto from ${progress?.periodsElapsed ?? 0} payments`}
-                          </p>
+                          </span>
+                        </div>
+                        <div className="relative mt-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                          <Input
+                            type="number"
+                            placeholder="0"
+                            value={
+                              progress?.isOverridden
+                                ? loan.repaid
+                                : (progress ? progress.derived.toFixed(2) : '')
+                            }
+                            onChange={e => updateLoan(idx, 'repaid', e.target.value)}
+                            className={`h-9 text-sm pl-6 w-full min-w-0 ${progress?.isOverridden ? '' : 'text-muted-foreground'}`}
+                          />
                         </div>
                       </div>
 
