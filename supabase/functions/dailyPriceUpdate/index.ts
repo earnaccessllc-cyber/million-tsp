@@ -284,9 +284,18 @@ function calcLoanRepayments(profile, today) {
     const original = loan.original_amount || 0;
     if (perPeriod <= 0 || original <= 0) continue;
 
+    // Same precedence the app displays: the rate off the loan agreement wins,
+    // else one solved from a tsp.gov balance reading, else a typical G Fund
+    // rate. The two must agree or the payoff the app shows and the day this
+    // job stops crediting would drift apart.
     let periodicRate = DEFAULT_LOAN_ANNUAL_RATE / 100 / perYear;
+    const entered = Number(loan.interest_rate);
     const reading = Number(loan.remaining_principal);
-    if (loan.remaining_principal !== null && loan.remaining_principal !== undefined
+
+    if (loan.interest_rate !== null && loan.interest_rate !== undefined
+        && loan.interest_rate !== '' && !isNaN(entered) && entered > 0) {
+      periodicRate = entered / 100 / perYear;
+    } else if (loan.remaining_principal !== null && loan.remaining_principal !== undefined
         && loan.remaining_principal !== '' && !isNaN(reading) && reading >= 0) {
       const nAtReading = payPeriodsSinceStart(
         loan.start_date, loan.principal_as_of || today, paySchedule, anchor
