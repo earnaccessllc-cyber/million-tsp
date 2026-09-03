@@ -354,15 +354,61 @@ export default function ContributionsSettings() {
                           </div>
                         </div>
                       </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Loan Start Date</Label>
-                        <Input
-                          type="date"
-                          value={loan.start_date || ''}
-                          onChange={e => updateLoan(idx, 'start_date', e.target.value)}
-                          className="h-9 text-sm mt-1"
-                        />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Loan Start Date</Label>
+                          <Input
+                            type="date"
+                            value={loan.start_date || ''}
+                            onChange={e => updateLoan(idx, 'start_date', e.target.value)}
+                            className="h-9 text-sm mt-1"
+                          />
+                        </div>
+                        {/* Paid off so far.
+                            The nightly job advances this on every pay day, but it had no
+                            input, so it could only ever count from zero — a loan already
+                            years into repayment showed 0% paid off, and because
+                            calcLoanRepayments caps each payment at what's still owed, the
+                            job would go on crediting repayments long after the loan was
+                            actually settled. */}
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Paid off so far</Label>
+                          <div className="relative mt-1">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              value={loan.repaid ?? ''}
+                              onChange={e => updateLoan(idx, 'repaid', e.target.value)}
+                              className="h-9 text-sm pl-6"
+                            />
+                          </div>
+                        </div>
                       </div>
+
+                      {/* Echo the arithmetic back while typing, so a figure copied off a
+                          TSP statement can be checked without saving first. */}
+                      {(() => {
+                        const orig = parseFloat(loan.original_amount) || 0;
+                        const paid = parseFloat(loan.repaid) || 0;
+                        if (orig <= 0) return null;
+                        if (paid > orig) {
+                          return (
+                            <p className="text-[10px] text-loss">
+                              Paid off ({fmt(paid)}) is more than the original amount ({fmt(orig)}) — the loan would
+                              count as settled and no further repayments would be added.
+                            </p>
+                          );
+                        }
+                        return (
+                          <p className="text-[10px] text-muted-foreground">
+                            Leaves {fmt(orig - paid)} still owed
+                            {(parseFloat(loan.per_period_payment) || 0) > 0
+                              ? ` — about ${Math.ceil((orig - paid) / parseFloat(loan.per_period_payment))} pay periods to go.`
+                              : '.'}
+                          </p>
+                        );
+                      })()}
 
                       {/* Live paydown progress — reflects actual repayments tracked by the
                           nightly job, not the unsaved fields above */}
