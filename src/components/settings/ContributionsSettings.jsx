@@ -14,6 +14,7 @@ import {
   PAY_PERIODS, IRS_LIMIT_2026, calcYTD
 } from '@/lib/contributionCalc';
 import { localDateString } from '@/lib/balanceUpdatedAt';
+import { calcLoanProgress } from '@/lib/loanProgress';
 
 export default function ContributionsSettings() {
   const { activeProfile, refreshProfiles } = useProfile();
@@ -78,16 +79,17 @@ export default function ContributionsSettings() {
   const rothPct = parseFloat(local.contrib_roth_percent) || 0;
   const rothDollar = parseFloat(local.contrib_roth_dollar) || 0;
 
-  // Live progress per loan, read from activeProfile.loans (DB-tracked truth,
-  // updated nightly) — not the editable draft fields below.
-  const liveLoans = activeProfile?.loans || [];
-  const loanProgress = (loanId) => {
-    const l = liveLoans.find(x => x.id === loanId);
-    if (!l || !l.original_amount) return null;
-    const repaid = l.repaid || 0;
-    const remaining = Math.max(0, l.original_amount - repaid);
-    const pct = Math.min(100, (repaid / l.original_amount) * 100);
-    return { repaid, remaining, pct };
+  // Progress is derived from the loan's own start date, per-period payment and
+  // the pay calendar, so it reflects the real state of a loan the moment its
+  // details are entered — it doesn't have to be accumulated from zero. Read
+  // from the draft rather than activeProfile so the bar responds while editing.
+  const loanProgress = (idx) => {
+    const draft = loans[idx];
+    if (!draft) return null;
+    return calcLoanProgress(draft, {
+      pay_schedule: local.pay_schedule || activeProfile?.pay_schedule,
+      pay_date_anchor: local.pay_date_anchor || activeProfile?.pay_date_anchor,
+    });
   };
 
   const trad = resolveContrib(local.contrib_traditional_mode, tradPct, tradDollar, salary, paySchedule);
@@ -307,7 +309,7 @@ export default function ContributionsSettings() {
                 )}
 
                 {loans.map((loan, idx) => {
-                  const progress = loanProgress(loan.id);
+                  const progress = loanProgress(idx);
                   return (
                     <div key={loan.id || idx} className="rounded-lg bg-secondary/30 border border-border p-3 space-y-2">
                       <div className="flex items-center justify-between">
@@ -364,63 +366,50 @@ export default function ContributionsSettings() {
                             className="h-9 text-sm mt-1"
                           />
                         </div>
-                        {/* Paid off so far.
-                            The nightly job advances this on every pay day, but it had no
-                            input, so it could only ever count from zero — a loan already
-                            years into repayment showed 0% paid off, and because
-                            calcLoanRepayments caps each payment at what's still owed, the
-                            job would go on crediting repayments long after the loan was
-                            actually settled. */}
+                        {/* Paid off so far — an override, not the source of truth.
+                            Progress is worked out from the start date and the per-period
+                            payment; this is only for what that can't know, such as extra
+                            payments or a payroll gap. Left blank, the derived figure is
+                            used, which is the normal case. */}
                         <div>
                           <Label className="text-xs text-muted-foreground">Paid off so far</Label>
                           <div className="relative mt-1">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                             <Input
                               type="number"
-                              placeholder="0"
-                              value={loan.repaid ?? ''}
+                              placeholder={progress ? progress.derived.toFixed(2) : '0'}
+                              value={loan.repaid === 0 ? '' : (loan.repaid ?? '')}
                               onChange={e => updateLoan(idx, 'repaid', e.target.value)}
                               className="h-9 text-sm pl-6"
                             />
                           </div>
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            {progress?.isOverridden ? 'Overriding the calculated figure' : 'Auto — leave blank'}
+                          </p>
                         </div>
                       </div>
 
-                      {/* Echo the arithmetic back while typing, so a figure copied off a
-                          TSP statement can be checked without saving first. */}
-                      {(() => {
-                        const orig = parseFloat(loan.original_amount) || 0;
-                        const paid = parseFloat(loan.repaid) || 0;
-                        if (orig <= 0) return null;
-                        if (paid > orig) {
-                          return (
-                            <p className="text-[10px] text-loss">
-                              Paid off ({fmt(paid)}) is more than the original amount ({fmt(orig)}) — the loan would
-                              count as settled and no further repayments would be added.
-                            </p>
-                          );
-                        }
-                        return (
-                          <p className="text-[10px] text-muted-foreground">
-                            Leaves {fmt(orig - paid)} still owed
-                            {(parseFloat(loan.per_period_payment) || 0) > 0
-                              ? ` — about ${Math.ceil((orig - paid) / parseFloat(loan.per_period_payment))} pay periods to go.`
-                              : '.'}
-                          </p>
-                        );
-                      })()}
+                      {progress && progress.isOverridden && progress.repaid > (parseFloat(loan.original_amount) || 0) && (
+                        <p className="text-[10px] text-loss">
+                          Paid off is more than the original amount — the loan counts as settled and no further
+                          repayments will be added.
+                        </p>
+                      )}
 
-                      {/* Live paydown progress — reflects actual repayments tracked by the
-                          nightly job, not the unsaved fields above */}
+                      {/* Paydown progress, worked out from the fields above rather than
+                          read from a stored counter — so it responds while editing and is
+                          right from the moment a loan is entered. */}
                       {progress && (
                         <div className="rounded-lg bg-muted/60 border border-border p-2.5 space-y-1.5">
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-semibold text-foreground">Progress</span>
+                            <span className="text-[11px] font-semibold text-foreground">
+                              {progress.isPaidOff ? 'Paid off' : 'Progress'}
+                            </span>
                             <span className="text-[11px] font-bold text-primary">{progress.pct.toFixed(1)}% paid off</span>
                           </div>
                           <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
                             <div
-                              className="h-full bg-primary rounded-full transition-all"
+                              className={`h-full rounded-full transition-all ${progress.isPaidOff ? 'bg-gain' : 'bg-primary'}`}
                               style={{ width: `${progress.pct}%` }}
                             />
                           </div>
@@ -434,6 +423,17 @@ export default function ContributionsSettings() {
                               <p className="text-xs font-bold text-gain">{fmt(progress.repaid)}</p>
                             </div>
                           </div>
+                          <p className="text-[10px] text-muted-foreground pt-0.5">
+                            {progress.isPaidOff
+                              ? 'No further repayments will be added to your balance.'
+                              : `${progress.periodsElapsed} payments made${
+                                  progress.periodsRemaining ? `, ${progress.periodsRemaining} to go` : ''
+                                }${
+                                  progress.payoffDate
+                                    ? ` — paid off around ${progress.payoffDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+                                    : ''
+                                }.`}
+                          </p>
                         </div>
                       )}
                     </div>

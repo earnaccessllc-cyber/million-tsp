@@ -200,24 +200,79 @@ function calcPayPeriodContribution(profile) {
   return trad.dollar + roth.dollar + matchDollar;
 }
 
+// How many pay days fall in (startDate, asOf]. Mirrors src/lib/loanProgress.js
+// exactly — the client shows the progress bar from this and the job caps
+// repayments by it, so the two must agree.
+//
+// The first payment comes out on the first pay day AFTER the loan starts, so
+// the start date itself is excluded even when it lands on a pay day.
+function payPeriodsSinceStart(startDate, asOf, paySchedule, anchorDateStr) {
+  if (!startDate) return 0;
+  const start = new Date(`${String(startDate).slice(0, 10)}T00:00:00Z`);
+  const end = new Date(`${String(asOf).slice(0, 10)}T00:00:00Z`);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return 0;
+
+  if (paySchedule === 'monthly') {
+    return (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth());
+  }
+
+  const DAY = 86400000;
+  if (anchorDateStr) {
+    const anchor = new Date(`${String(anchorDateStr).slice(0, 10)}T00:00:00Z`);
+    if (!isNaN(anchor.getTime())) {
+      const daysSinceAnchor = Math.floor((end - anchor) / DAY);
+      const backToPayDay = ((daysSinceAnchor % 14) + 14) % 14;
+      const lastPayDay = new Date(end.getTime() - backToPayDay * DAY);
+      if (lastPayDay <= start) return 0;
+      return Math.ceil((lastPayDay - start) / (14 * DAY));
+    }
+  }
+  return Math.floor((end - start) / (14 * DAY));
+}
+
 // TSP loan repayments (principal + interest) are deposited back into the
-// account and invested per the participant's contribution allocation, same
-// as a regular contribution (confirmed via tsp.gov loan guidance) — but only
-// up to whatever's actually still owed on that specific loan. A profile can
-// have more than one active loan (general purpose + residential, etc.), each
-// tracked independently in profile.loans.
-function calcLoanRepayments(profile) {
+// account and invested per the participant's contribution allocation, same as a
+// regular contribution (confirmed via tsp.gov loan guidance) — but only up to
+// whatever's actually still owed on that specific loan. A profile can have more
+// than one active loan (general purpose + residential, etc.).
+//
+// How much is already repaid used to be a counter this job incremented every
+// pay day. It started at zero with no way to set it, so a loan years into
+// repayment looked untouched, and since that counter is what caps the payment,
+// the job would go on crediting repayments long after the loan was settled.
+// It is now derived from the loan's own start date and per-period payment, the
+// same way the app draws the progress bar — stateless, self-correcting, and
+// right from the moment the loan's details are entered.
+function calcLoanRepayments(profile, today) {
   const loans = Array.isArray(profile.loans) ? profile.loans : [];
+  const paySchedule = profile.pay_schedule || 'biweekly';
+  const anchor = profile.pay_date_anchor || null;
+
+  // The day before today, so "already repaid" means before this pay day's
+  // payment rather than including it.
+  const yesterday = new Date(new Date(`${today}T00:00:00Z`).getTime() - 86400000)
+    .toISOString().split('T')[0];
+
   let total = 0;
-  const updatedLoans = loans.map((loan) => {
+  for (const loan of loans) {
     const perPeriod = loan.per_period_payment || 0;
-    const alreadyRepaid = loan.repaid || 0;
-    const remaining = Math.max(0, (loan.original_amount || 0) - alreadyRepaid);
-    const due = Math.min(perPeriod, remaining);
-    total += due;
-    return due > 0 ? { ...loan, repaid: alreadyRepaid + due } : loan;
-  });
-  return { total, updatedLoans };
+    const original = loan.original_amount || 0;
+    if (perPeriod <= 0 || original <= 0) continue;
+
+    // An explicitly entered figure wins, matching the client's override rule.
+    const override = (loan.repaid === '' || loan.repaid === null || loan.repaid === undefined)
+      ? null
+      : Number(loan.repaid);
+    const hasOverride = override !== null && !isNaN(override) && override > 0;
+
+    const derivedBefore = Math.min(
+      payPeriodsSinceStart(loan.start_date, yesterday, paySchedule, anchor) * perPeriod,
+      original
+    );
+    const repaidBefore = hasOverride ? Math.min(override, original) : derivedBefore;
+    total += Math.min(perPeriod, Math.max(0, original - repaidBefore));
+  }
+  return { total };
 }
 
 Deno.serve(async (req) => {
@@ -355,12 +410,10 @@ Deno.serve(async (req) => {
         }
         const payPeriodIsNew = !!payDate && !payPeriodRow;
 
-        // Loan repayment tracking advances when payroll takes the money, not
-        // when TSP posts it and not only when crediting is switched on. How much
-        // of a loan has come out of your pay is a fact about payroll; when the
-        // deposit reaches the account is a separate question, and only the
-        // second one is in doubt.
-        const loanResult = payPeriodIsNew ? calcLoanRepayments(profile) : { total: 0, updatedLoans: profile.loans };
+        // What payroll took toward loans this pay period. Derived from each
+        // loan's start date rather than a stored counter, so this job no longer
+        // writes progress back — there is nothing to keep in sync.
+        const loanResult = payPeriodIsNew ? calcLoanRepayments(profile, today) : { total: 0 };
 
         if (payPeriodIsNew) {
           const lagDays = Math.min(30, Math.max(0, Math.round(Number(profile.contribution_posting_lag_days ?? 3)) || 0));
@@ -556,14 +609,6 @@ Deno.serve(async (req) => {
           balance_last_confirmed: today,
           balance_last_confirmed_at: new Date().toISOString(),
         };
-        // loanResult.total is what payroll took this pay period;
-        // loanRepaymentAmount is what the queue paid into the balance today.
-        // They are different days, so progress keys off the first: a loan is
-        // paid down when the deduction leaves your check, not when TSP posts
-        // the deposit.
-        if (loanResult.total > 0) {
-          profileUpdates.loans = loanResult.updatedLoans;
-        }
         if (newTotalBalance > (profile.highest_balance || 0)) {
           profileUpdates.highest_balance = newTotalBalance;
           profileUpdates.highest_balance_date = today;
