@@ -137,28 +137,47 @@ export function calcLoanProgress(loan, profile, asOf = null) {
   const anchor = profile?.pay_date_anchor || null;
   const periodsElapsed = payPeriodsBetween(loan?.start_date, asOf, paySchedule, anchor);
 
-  // Calibrate against a real Remaining Principal Amount read off tsp.gov, if one
-  // has been entered. principal_as_of records the day it was read, so the
-  // balance can be carried forward from that point rather than assuming the
-  // figure is current forever.
-  const reading = parseFloat(loan?.remaining_principal);
-  const hasReading = !isNaN(reading) && reading >= 0 && loan?.remaining_principal !== '' && loan?.remaining_principal !== null;
-  let periodicRate = DEFAULT_ANNUAL_RATE / 100 / (paySchedule === 'monthly' ? 12 : 26);
-  let calibrated = false;
+  const perYear = paySchedule === 'monthly' ? 12 : 26;
 
-  if (hasReading) {
-    const nAtReading = payPeriodsBetween(
-      loan?.start_date,
-      loan?.principal_as_of || asOf,
-      paySchedule,
-      anchor
-    );
-    const solved = solvePeriodicRate(original, perPeriod, nAtReading, reading);
-    if (solved !== null) {
-      periodicRate = solved;
-      calibrated = true;
-    }
+  // Where the rate comes from, most authoritative first.
+  //
+  //   entered    the rate off the loan agreement. It IS the loan's rate, so
+  //              nothing should second-guess it.
+  //   matched    solved from a Remaining Principal Amount read off tsp.gov,
+  //              for someone who has the balance to hand but not the rate.
+  //   estimated  neither given: a typical G Fund rate, flagged as a guess.
+  //
+  // principal_as_of records the day a reading was taken, so the balance is
+  // carried forward from that point rather than assumed current forever.
+  const entered = parseFloat(loan?.interest_rate);
+  const hasEntered = !isNaN(entered) && entered > 0
+    && loan?.interest_rate !== '' && loan?.interest_rate !== null;
+
+  const reading = parseFloat(loan?.remaining_principal);
+  const hasReading = !isNaN(reading) && reading >= 0
+    && loan?.remaining_principal !== '' && loan?.remaining_principal !== null;
+
+  const nAtReading = hasReading
+    ? payPeriodsBetween(loan?.start_date, loan?.principal_as_of || asOf, paySchedule, anchor)
+    : 0;
+  const solved = hasReading ? solvePeriodicRate(original, perPeriod, nAtReading, reading) : null;
+
+  let periodicRate = DEFAULT_ANNUAL_RATE / 100 / perYear;
+  let rateSource = 'estimated';
+  if (hasEntered) {
+    periodicRate = entered / 100 / perYear;
+    rateSource = 'entered';
+  } else if (solved !== null) {
+    periodicRate = solved;
+    rateSource = 'matched';
   }
+
+  // When both are given they are independent facts about the same loan, so a
+  // disagreement means one of them is mistyped. Surfacing the balance the
+  // entered rate implies lets that be seen rather than silently believed.
+  const impliedByEnteredRate = (hasEntered && hasReading)
+    ? Math.max(0, balanceAfter(original, perPeriod, periodicRate, nAtReading))
+    : null;
 
   const remaining = Math.max(0, balanceAfter(original, perPeriod, periodicRate, periodsElapsed));
   const principalRepaid = Math.max(0, original - remaining);
@@ -182,8 +201,13 @@ export function calcLoanProgress(loan, profile, asOf = null) {
     // on a TSP loan is paid back to the participant's own account.
     totalPaid: Math.min(periodsElapsed, term ?? periodsElapsed) * perPeriod,
     interestPaid: Math.max(0, Math.min(periodsElapsed, term ?? periodsElapsed) * perPeriod - principalRepaid),
-    annualRate: periodicRate * (paySchedule === 'monthly' ? 12 : 26) * 100,
-    calibrated,
+    annualRate: periodicRate * perYear * 100,
+    rateSource,
+    // True when an entered rate and a tsp.gov reading disagree by more than a
+    // dollar — almost always a typo in one of them.
+    rateConflict: impliedByEnteredRate !== null && Math.abs(impliedByEnteredRate - reading) > 1,
+    readingImplies: impliedByEnteredRate,
+    reading: hasReading ? reading : null,
     pct: Math.min(100, (principalRepaid / original) * 100),
     periodsRemaining,
     term,

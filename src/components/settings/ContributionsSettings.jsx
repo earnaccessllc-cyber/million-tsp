@@ -50,7 +50,7 @@ export default function ContributionsSettings() {
   const addLoan = () => {
     setLoans(prev => [...prev, {
       id: `loan-${Date.now()}`, label: `Loan ${prev.length + 1}`,
-      original_amount: '', start_date: '', per_period_payment: '', remaining_principal: '',
+      original_amount: '', start_date: '', per_period_payment: '', interest_rate: '', remaining_principal: '',
     }]);
   };
   const removeLoan = (idx) => setLoans(prev => prev.filter((_, i) => i !== idx));
@@ -133,6 +133,9 @@ export default function ContributionsSettings() {
         ...l,
         original_amount: parseFloat(l.original_amount) || 0,
         per_period_payment: parseFloat(l.per_period_payment) || 0,
+        interest_rate: l.interest_rate === '' || l.interest_rate === null || l.interest_rate === undefined
+          ? null
+          : parseFloat(l.interest_rate),
         remaining_principal: l.remaining_principal === '' || l.remaining_principal === null || l.remaining_principal === undefined
           ? null
           : parseFloat(l.remaining_principal),
@@ -387,37 +390,58 @@ export default function ContributionsSettings() {
                         />
                       </div>
 
-                      {/* Remaining Principal Amount, copied off tsp.gov.
-                          A loan payment is principal plus interest, so progress can't be
-                          worked out from the payments alone — the interest rate is needed,
-                          and tsp.gov doesn't show it on the loan summary. It does show the
-                          remaining principal, so that is what gets asked for: the rate
-                          falls out of it, and the balance carries forward from there on
-                          its own. Left blank, the balance is an estimate at a typical
-                          rate, and is labelled as one. */}
-                      <div>
-                        <div className="flex items-baseline justify-between gap-2">
-                          <Label className="text-xs text-muted-foreground">Remaining principal</Label>
-                          <span className={`text-[10px] shrink-0 ${progress?.calibrated ? 'text-gain' : 'text-amber-500'}`}>
-                            {progress?.calibrated
-                              ? `Matched — ${progress.annualRate.toFixed(2)}% APR`
-                              : 'Estimated — enter to make exact'}
-                          </span>
+                      {/* Two ways to pin the interest rate, because a participant may
+                          have either number to hand and not the other.
+                          The rate off the loan agreement is the loan's actual rate, so it
+                          wins outright. Failing that, tsp.gov's Remaining Principal
+                          Amount implies a rate, which is solved for. Failing both, a
+                          typical G Fund rate is used and labelled a guess rather than
+                          presented as fact. */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="min-w-0">
+                          <Label className="text-xs text-muted-foreground">Interest rate</Label>
+                          <div className="relative mt-1">
+                            <Input
+                              type="number"
+                              step="0.001"
+                              placeholder={progress ? progress.annualRate.toFixed(3) : '4.000'}
+                              value={loan.interest_rate ?? ''}
+                              onChange={e => updateLoan(idx, 'interest_rate', e.target.value)}
+                              className="h-9 text-sm pr-7 w-full min-w-0"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                          </div>
                         </div>
-                        <div className="relative mt-1">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                          <Input
-                            type="number"
-                            placeholder={progress ? progress.remaining.toFixed(2) : '0'}
-                            value={loan.remaining_principal ?? ''}
-                            onChange={e => updateLoan(idx, 'remaining_principal', e.target.value)}
-                            className="h-9 text-sm pl-6 w-full min-w-0"
-                          />
+                        <div className="min-w-0">
+                          <Label className="text-xs text-muted-foreground">Principal left</Label>
+                          <div className="relative mt-1">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                            <Input
+                              type="number"
+                              placeholder={progress ? progress.remaining.toFixed(2) : '0'}
+                              value={loan.remaining_principal ?? ''}
+                              onChange={e => updateLoan(idx, 'remaining_principal', e.target.value)}
+                              className="h-9 text-sm pl-6 w-full min-w-0"
+                            />
+                          </div>
                         </div>
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                          From tsp.gov &rarr; Loans &rarr; &ldquo;Remaining Principal Amount&rdquo;. Only needed once.
-                        </p>
                       </div>
+
+                      {progress && (
+                        <p className={`text-[10px] leading-relaxed ${
+                          progress.rateConflict ? 'text-loss'
+                            : progress.rateSource === 'estimated' ? 'text-amber-500'
+                            : 'text-muted-foreground'
+                        }`}>
+                          {progress.rateConflict
+                            ? `These disagree: at ${progress.annualRate.toFixed(3)}% the principal left today would be ${fmt(progress.readingImplies)}, not ${fmt(progress.reading)}. Check both against tsp.gov — the rate is being used.`
+                            : progress.rateSource === 'entered'
+                              ? `Using ${progress.annualRate.toFixed(3)}% from your loan agreement.`
+                              : progress.rateSource === 'matched'
+                                ? `Rate worked out from that balance: ${progress.annualRate.toFixed(3)}%. Either field alone is enough.`
+                                : `No rate yet — estimating at ${progress.annualRate.toFixed(3)}%. Enter your rate, or the Remaining Principal Amount from tsp.gov, to make this exact.`}
+                        </p>
+                      )}
 
                       {/* Paydown progress, worked out from the fields above rather than
                           read from a stored counter — so it responds while editing and is
