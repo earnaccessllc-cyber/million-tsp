@@ -50,7 +50,7 @@ export default function ContributionsSettings() {
   const addLoan = () => {
     setLoans(prev => [...prev, {
       id: `loan-${Date.now()}`, label: `Loan ${prev.length + 1}`,
-      original_amount: '', start_date: '', per_period_payment: '', repaid: 0,
+      original_amount: '', start_date: '', per_period_payment: '', remaining_principal: '',
     }]);
   };
   const removeLoan = (idx) => setLoans(prev => prev.filter((_, i) => i !== idx));
@@ -133,7 +133,17 @@ export default function ContributionsSettings() {
         ...l,
         original_amount: parseFloat(l.original_amount) || 0,
         per_period_payment: parseFloat(l.per_period_payment) || 0,
-        repaid: parseFloat(l.repaid) || 0,
+        remaining_principal: l.remaining_principal === '' || l.remaining_principal === null || l.remaining_principal === undefined
+          ? null
+          : parseFloat(l.remaining_principal),
+        // Record the day the reading was taken, so the balance can be carried
+        // forward from it rather than treated as current forever. Re-stamped
+        // only when the figure itself changes.
+        principal_as_of: (() => {
+          const live = (activeProfile?.loans || []).find(x => x.id === l.id);
+          const unchanged = live && String(live.remaining_principal ?? '') === String(l.remaining_principal ?? '');
+          return unchanged ? (live.principal_as_of || localDateString()) : localDateString();
+        })(),
       }));
     // contribution_credit_from is where the deposit queue starts paying out.
     // Stamping it on the day crediting is switched on keeps the queue from
@@ -377,43 +387,37 @@ export default function ContributionsSettings() {
                         />
                       </div>
 
-                      {/* Paid off so far fills itself in from the start date and the
-                          per-period payment — that is the normal case, and it is shown as
-                          a real value rather than a placeholder so the number is visible
-                          without anyone having to work it out. Typing replaces it with an
-                          override, for what the calculation can't know (extra payments, a
-                          payroll gap); clearing the box hands it back to the calculation. */}
+                      {/* Remaining Principal Amount, copied off tsp.gov.
+                          A loan payment is principal plus interest, so progress can't be
+                          worked out from the payments alone — the interest rate is needed,
+                          and tsp.gov doesn't show it on the loan summary. It does show the
+                          remaining principal, so that is what gets asked for: the rate
+                          falls out of it, and the balance carries forward from there on
+                          its own. Left blank, the balance is an estimate at a typical
+                          rate, and is labelled as one. */}
                       <div>
                         <div className="flex items-baseline justify-between gap-2">
-                          <Label className="text-xs text-muted-foreground">Paid off so far</Label>
-                          <span className="text-[10px] text-muted-foreground shrink-0">
-                            {progress?.isOverridden
-                              ? 'Manual — clear to recalculate'
-                              : `Auto from ${progress?.periodsElapsed ?? 0} payments`}
+                          <Label className="text-xs text-muted-foreground">Remaining principal</Label>
+                          <span className={`text-[10px] shrink-0 ${progress?.calibrated ? 'text-gain' : 'text-amber-500'}`}>
+                            {progress?.calibrated
+                              ? `Matched — ${progress.annualRate.toFixed(2)}% APR`
+                              : 'Estimated — enter to make exact'}
                           </span>
                         </div>
                         <div className="relative mt-1">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                           <Input
                             type="number"
-                            placeholder="0"
-                            value={
-                              progress?.isOverridden
-                                ? loan.repaid
-                                : (progress ? progress.derived.toFixed(2) : '')
-                            }
-                            onChange={e => updateLoan(idx, 'repaid', e.target.value)}
-                            className={`h-9 text-sm pl-6 w-full min-w-0 ${progress?.isOverridden ? '' : 'text-muted-foreground'}`}
+                            placeholder={progress ? progress.remaining.toFixed(2) : '0'}
+                            value={loan.remaining_principal ?? ''}
+                            onChange={e => updateLoan(idx, 'remaining_principal', e.target.value)}
+                            className="h-9 text-sm pl-6 w-full min-w-0"
                           />
                         </div>
-                      </div>
-
-                      {progress && progress.isOverridden && progress.repaid > (parseFloat(loan.original_amount) || 0) && (
-                        <p className="text-[10px] text-loss">
-                          Paid off is more than the original amount — the loan counts as settled and no further
-                          repayments will be added.
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          From tsp.gov &rarr; Loans &rarr; &ldquo;Remaining Principal Amount&rdquo;. Only needed once.
                         </p>
-                      )}
+                      </div>
 
                       {/* Paydown progress, worked out from the fields above rather than
                           read from a stored counter — so it responds while editing and is
@@ -433,15 +437,22 @@ export default function ContributionsSettings() {
                             />
                           </div>
                           <div className="grid grid-cols-2 gap-2 pt-0.5">
-                            <div>
-                              <p className="text-[10px] text-muted-foreground">Remaining</p>
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-muted-foreground">Principal left</p>
                               <p className="text-xs font-bold">{fmt(progress.remaining)}</p>
                             </div>
-                            <div>
-                              <p className="text-[10px] text-muted-foreground">Repaid so far</p>
-                              <p className="text-xs font-bold text-gain">{fmt(progress.repaid)}</p>
+                            <div className="min-w-0">
+                              <p className="text-[10px] text-muted-foreground">Principal repaid</p>
+                              <p className="text-xs font-bold text-gain">{fmt(progress.principalRepaid)}</p>
                             </div>
                           </div>
+                          {/* Payments out of the paycheck are more than the principal they
+                              retire; the difference is interest, which on a TSP loan is
+                              paid back into the participant's own account. Showing both
+                              stops the progress bar looking wrong against a payslip. */}
+                          <p className="text-[10px] text-muted-foreground">
+                            {fmt(progress.totalPaid)} paid in so far &middot; {fmt(progress.interestPaid)} of that interest
+                          </p>
                           <p className="text-[10px] text-muted-foreground pt-0.5">
                             {progress.isPaidOff
                               ? 'No further repayments will be added to your balance.'
