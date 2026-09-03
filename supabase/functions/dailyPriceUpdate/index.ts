@@ -230,26 +230,51 @@ function payPeriodsSinceStart(startDate, asOf, paySchedule, anchorDateStr) {
   return Math.floor((end - start) / (14 * DAY));
 }
 
-// TSP loan repayments (principal + interest) are deposited back into the
-// account and invested per the participant's contribution allocation, same as a
-// regular contribution (confirmed via tsp.gov loan guidance) — but only up to
-// whatever's actually still owed on that specific loan. A profile can have more
-// than one active loan (general purpose + residential, etc.).
+// Principal still owed after n level payments at periodic rate i, and the rate
+// implied by a known balance. Mirrors src/lib/loanProgress.js — the app draws
+// the progress bar from that and this caps repayments, so they must agree.
+function balanceAfter(principal, payment, periodicRate, n) {
+  if (n <= 0) return principal;
+  if (periodicRate <= 0) return Math.max(0, principal - payment * n);
+  const growth = Math.pow(1 + periodicRate, n);
+  return principal * growth - payment * ((growth - 1) / periodicRate);
+}
+
+function solvePeriodicRate(principal, payment, n, remaining) {
+  if (!(n > 0) || !(principal > 0) || !(payment > 0)) return null;
+  if (remaining <= balanceAfter(principal, payment, 0, n)) return 0;
+  let lo = 0;
+  let hi = 0.02;
+  if (balanceAfter(principal, payment, hi, n) < remaining) return hi;
+  for (let k = 0; k < 100; k += 1) {
+    const mid = (lo + hi) / 2;
+    if (balanceAfter(principal, payment, mid, n) < remaining) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+// TSP loan repayments are deposited back into the account and invested per the
+// participant's contribution allocation, same as a regular contribution
+// (confirmed via tsp.gov loan guidance) — the interest included, since on a TSP
+// loan the interest is paid to the participant's own account. So the amount
+// credited is the whole payment, not just its principal part.
 //
-// How much is already repaid used to be a counter this job incremented every
-// pay day. It started at zero with no way to set it, so a loan years into
-// repayment looked untouched, and since that counter is what caps the payment,
-// the job would go on crediting repayments long after the loan was settled.
-// It is now derived from the loan's own start date and per-period payment, the
-// same way the app draws the progress bar — stateless, self-correcting, and
-// right from the moment the loan's details are entered.
+// What the payment is capped by, though, is principal: the loan ends when the
+// principal reaches zero, and the last payment is whatever stub clears it. That
+// is why this amortizes rather than counting payments — counting them treats
+// interest as principal and would keep the loan "open" for months past payoff.
+// The rate comes from the remaining_principal reading entered off tsp.gov, or
+// falls back to a typical G Fund rate when there isn't one.
+const DEFAULT_LOAN_ANNUAL_RATE = 4.0;
+
 function calcLoanRepayments(profile, today) {
   const loans = Array.isArray(profile.loans) ? profile.loans : [];
   const paySchedule = profile.pay_schedule || 'biweekly';
   const anchor = profile.pay_date_anchor || null;
+  const perYear = paySchedule === 'monthly' ? 12 : 26;
 
-  // The day before today, so "already repaid" means before this pay day's
-  // payment rather than including it.
+  // The day before today, so "still owed" means before this pay day's payment.
   const yesterday = new Date(new Date(`${today}T00:00:00Z`).getTime() - 86400000)
     .toISOString().split('T')[0];
 
@@ -259,18 +284,24 @@ function calcLoanRepayments(profile, today) {
     const original = loan.original_amount || 0;
     if (perPeriod <= 0 || original <= 0) continue;
 
-    // An explicitly entered figure wins, matching the client's override rule.
-    const override = (loan.repaid === '' || loan.repaid === null || loan.repaid === undefined)
-      ? null
-      : Number(loan.repaid);
-    const hasOverride = override !== null && !isNaN(override) && override > 0;
+    let periodicRate = DEFAULT_LOAN_ANNUAL_RATE / 100 / perYear;
+    const reading = Number(loan.remaining_principal);
+    if (loan.remaining_principal !== null && loan.remaining_principal !== undefined
+        && loan.remaining_principal !== '' && !isNaN(reading) && reading >= 0) {
+      const nAtReading = payPeriodsSinceStart(
+        loan.start_date, loan.principal_as_of || today, paySchedule, anchor
+      );
+      const solved = solvePeriodicRate(original, perPeriod, nAtReading, reading);
+      if (solved !== null) periodicRate = solved;
+    }
 
-    const derivedBefore = Math.min(
-      payPeriodsSinceStart(loan.start_date, yesterday, paySchedule, anchor) * perPeriod,
-      original
-    );
-    const repaidBefore = hasOverride ? Math.min(override, original) : derivedBefore;
-    total += Math.min(perPeriod, Math.max(0, original - repaidBefore));
+    const owedBefore = Math.max(0, balanceAfter(
+      original, perPeriod, periodicRate,
+      payPeriodsSinceStart(loan.start_date, yesterday, paySchedule, anchor)
+    ));
+    // The final payment is the stub that clears the principal plus its last
+    // period of interest, never more.
+    total += Math.min(perPeriod, owedBefore * (1 + periodicRate));
   }
   return { total };
 }

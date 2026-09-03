@@ -1,29 +1,45 @@
 /**
  * How far along a TSP loan is.
  *
- * This used to be a stored counter: loan.repaid started at zero and the nightly
- * price job added one payment to it every pay day. Two things were wrong with
- * that. Nothing could ever set the starting point, so a loan years into
- * repayment read 0% paid off until it had been tracked from scratch. And
- * because the balance job caps each period's repayment at
- * `original_amount - repaid`, an understated counter meant it kept crediting
- * repayments to the balance long after the loan was actually settled.
+ * Two earlier models were wrong, in opposite directions.
  *
- * Progress is not really state — it is a function of three things the profile
- * already knows: when the loan started, what comes out each pay period, and
- * which days are pay days. Deriving it is self-correcting, needs no backfill,
- * and cannot drift from reality just because the job missed a night.
+ * First it was a stored counter: loan.repaid started at zero and the nightly
+ * price job added a payment each pay day. Nothing could set the starting point,
+ * so a loan years into repayment read 0% paid off.
  *
- * A caveat this model inherits and does not try to solve: a TSP loan payment is
- * principal plus interest, so payments-to-date is not strictly principal
- * repaid. `original_amount` is treated as the total to be repaid, which is how
- * the rest of the app has always used it, and is close enough for a progress
- * bar. It is not an amortization schedule.
+ * Then it was payments x count. That is not principal either — a TSP loan
+ * payment is principal PLUS interest, so counting payments credits the interest
+ * as if it had paid the loan down. Checked against tsp.gov it overstated
+ * progress badly: $1,863.91 remaining against a real $2,807.31 on one loan, and
+ * $5,146.50 against a real $8,938.82 on the other.
+ *
+ * A TSP loan is an ordinary level-payment amortizing loan, so the balance after
+ * n payments is the standard closed form:
+ *
+ *     B(n) = P(1+i)^n - PMT * ((1+i)^n - 1) / i
+ *
+ * That reproduces tsp.gov's Remaining Principal Amount to the cent on both
+ * loans, which is the test that matters.
+ *
+ * The rate is the missing input, and tsp.gov doesn't put it on the loan summary.
+ * Rather than ask for a number that isn't in front of the participant, the rate
+ * is solved from one that is: enter the Remaining Principal Amount off tsp.gov
+ * and the implied rate falls out, after which the balance can be carried forward
+ * on its own. Without a reading, DEFAULT_ANNUAL_RATE is used and the result is
+ * marked an estimate rather than quietly presented as fact.
+ *
+ * Note the interest is not lost to the participant — a TSP loan repayment goes
+ * back into their own account — so the amount credited to the balance each pay
+ * period is still the whole payment. It just isn't all principal, which is the
+ * distinction this file exists to keep straight.
  */
 
 const DAY = 24 * 60 * 60 * 1000;
 
-/** Local midnight, so date maths can't be knocked about by the clock time. */
+// TSP loan interest is fixed at the G Fund rate when the loan is taken out.
+// Used only until a real Remaining Principal reading calibrates the loan.
+const DEFAULT_ANNUAL_RATE = 4.0;
+
 function atMidnight(d) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -54,22 +70,55 @@ export function payPeriodsBetween(startDate, asOf, paySchedule = 'biweekly', anc
 
   const anchor = parseDate(anchorDateStr);
   if (anchor) {
-    // Walk back from the most recent pay day on or before `end` to the first one
-    // after `start`, on the real 14-day cycle the anchor pins.
     const daysSinceAnchor = Math.floor((end - anchor) / DAY);
     const backToPayDay = ((daysSinceAnchor % 14) + 14) % 14;
     const lastPayDay = new Date(end.getTime() - backToPayDay * DAY);
     if (lastPayDay <= start) return 0;
     // Pay days are lastPayDay - 14k. Counting those strictly after `start` is
     // ceil, not floor-plus-one: floor-plus-one double counts when the loan
-    // starts exactly on a pay day, which is the common case for a loan taken
-    // out at the start of a pay period.
+    // starts exactly on a pay day, which is the common case.
     return Math.ceil((lastPayDay - start) / (14 * DAY));
   }
 
-  // No known pay calendar: a 14-day cycle from the start date is the best
-  // estimate available, and is what the rest of the app falls back to.
   return Math.floor((end - start) / (14 * DAY));
+}
+
+/** Principal still owed after n level payments at periodic rate i. */
+export function balanceAfter(principal, payment, periodicRate, n) {
+  if (n <= 0) return principal;
+  if (periodicRate <= 0) return Math.max(0, principal - payment * n);
+  const growth = Math.pow(1 + periodicRate, n);
+  return principal * growth - payment * ((growth - 1) / periodicRate);
+}
+
+/**
+ * The periodic rate implied by a known balance — bisection rather than algebra
+ * because there is no closed form for i, and the function is monotonic in i so
+ * bisection is exact enough in a fixed number of steps.
+ */
+export function solvePeriodicRate(principal, payment, n, remaining) {
+  if (!(n > 0) || !(principal > 0) || !(payment > 0)) return null;
+  // A balance at or above the zero-interest case can't be explained by a
+  // non-negative rate; below it, no rate in a sane range reaches it.
+  if (remaining <= balanceAfter(principal, payment, 0, n)) return 0;
+  let lo = 0;
+  let hi = 0.02; // ~52%/yr — far past any plausible G Fund rate
+  if (balanceAfter(principal, payment, hi, n) < remaining) return hi;
+  for (let k = 0; k < 100; k += 1) {
+    const mid = (lo + hi) / 2;
+    if (balanceAfter(principal, payment, mid, n) < remaining) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/** Payments needed to clear the loan, or null if the payment never amortizes it. */
+function termInPeriods(principal, payment, periodicRate) {
+  if (periodicRate <= 0) return Math.ceil(principal / payment);
+  // A payment that doesn't cover the first period's interest never pays it off.
+  if (payment <= principal * periodicRate) return null;
+  const n = Math.log(payment / (payment - principal * periodicRate)) / Math.log(1 + periodicRate);
+  return Math.ceil(n);
 }
 
 /**
@@ -82,32 +131,43 @@ export function payPeriodsBetween(startDate, asOf, paySchedule = 'biweekly', anc
 export function calcLoanProgress(loan, profile, asOf = null) {
   const original = parseFloat(loan?.original_amount) || 0;
   const perPeriod = parseFloat(loan?.per_period_payment) || 0;
-  if (original <= 0) return null;
+  if (original <= 0 || perPeriod <= 0) return null;
 
-  const periodsElapsed = payPeriodsBetween(
-    loan?.start_date,
-    asOf,
-    profile?.pay_schedule || 'biweekly',
-    profile?.pay_date_anchor || null
-  );
+  const paySchedule = profile?.pay_schedule || 'biweekly';
+  const anchor = profile?.pay_date_anchor || null;
+  const periodsElapsed = payPeriodsBetween(loan?.start_date, asOf, paySchedule, anchor);
 
-  // An explicitly entered figure wins. It covers what the derivation can't
-  // know: extra payments, a re-amortized loan, a payroll gap. Blank means
-  // "work it out for me", which is the normal case.
-  const override = loan?.repaid === '' || loan?.repaid === null || loan?.repaid === undefined
-    ? null
-    : parseFloat(loan.repaid);
-  const hasOverride = override !== null && !isNaN(override) && override > 0;
+  // Calibrate against a real Remaining Principal Amount read off tsp.gov, if one
+  // has been entered. principal_as_of records the day it was read, so the
+  // balance can be carried forward from that point rather than assuming the
+  // figure is current forever.
+  const reading = parseFloat(loan?.remaining_principal);
+  const hasReading = !isNaN(reading) && reading >= 0 && loan?.remaining_principal !== '' && loan?.remaining_principal !== null;
+  let periodicRate = DEFAULT_ANNUAL_RATE / 100 / (paySchedule === 'monthly' ? 12 : 26);
+  let calibrated = false;
 
-  const derived = Math.min(periodsElapsed * perPeriod, original);
-  const repaid = Math.min(hasOverride ? override : derived, original);
-  const remaining = Math.max(0, original - repaid);
-  const periodsRemaining = perPeriod > 0 ? Math.ceil(remaining / perPeriod) : null;
+  if (hasReading) {
+    const nAtReading = payPeriodsBetween(
+      loan?.start_date,
+      loan?.principal_as_of || asOf,
+      paySchedule,
+      anchor
+    );
+    const solved = solvePeriodicRate(original, perPeriod, nAtReading, reading);
+    if (solved !== null) {
+      periodicRate = solved;
+      calibrated = true;
+    }
+  }
+
+  const remaining = Math.max(0, balanceAfter(original, perPeriod, periodicRate, periodsElapsed));
+  const principalRepaid = Math.max(0, original - remaining);
+  const term = termInPeriods(original, perPeriod, periodicRate);
+  const periodsRemaining = term === null ? null : Math.max(0, term - periodsElapsed);
 
   let payoffDate = null;
-  if (periodsRemaining !== null && periodsRemaining > 0 && (profile?.pay_schedule || 'biweekly') === 'biweekly') {
-    const anchor = parseDate(profile?.pay_date_anchor);
-    const base = anchor || atMidnight(new Date());
+  if (periodsRemaining !== null && periodsRemaining > 0 && paySchedule === 'biweekly') {
+    const base = parseDate(anchor) || atMidnight(new Date());
     const today = atMidnight(new Date());
     const daysSince = Math.floor((today - base) / DAY);
     const toNextPayDay = ((14 - (((daysSince % 14) + 14) % 14)) % 14) || 14;
@@ -116,18 +176,23 @@ export function calcLoanProgress(loan, profile, asOf = null) {
 
   return {
     periodsElapsed,
-    derived,
-    repaid,
     remaining,
-    isOverridden: hasOverride,
-    pct: Math.min(100, (repaid / original) * 100),
+    principalRepaid,
+    // What has actually left the paycheck — principal plus the interest, which
+    // on a TSP loan is paid back to the participant's own account.
+    totalPaid: Math.min(periodsElapsed, term ?? periodsElapsed) * perPeriod,
+    interestPaid: Math.max(0, Math.min(periodsElapsed, term ?? periodsElapsed) * perPeriod - principalRepaid),
+    annualRate: periodicRate * (paySchedule === 'monthly' ? 12 : 26) * 100,
+    calibrated,
+    pct: Math.min(100, (principalRepaid / original) * 100),
     periodsRemaining,
+    term,
     payoffDate,
-    isPaidOff: remaining <= 0,
+    isPaidOff: remaining <= 0.005,
   };
 }
 
-/** Total still owed across every loan — what a payoff would cost today. */
+/** Total principal still owed across every loan. */
 export function totalRemaining(profile) {
   const loans = Array.isArray(profile?.loans) ? profile.loans : [];
   return loans.reduce((sum, l) => {
