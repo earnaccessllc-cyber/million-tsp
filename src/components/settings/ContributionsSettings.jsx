@@ -356,35 +356,48 @@ export default function ContributionsSettings() {
                           </div>
                         </div>
                       </div>
+                      {/* min-w-0 on both cells: a grid item defaults to min-width:auto,
+                          which refuses to shrink below its content. A native date input
+                          reports a wide intrinsic size on mobile, so without this the
+                          date field overflowed its column and sat underneath the money
+                          field next to it. */}
                       <div className="grid grid-cols-2 gap-3">
-                        <div>
+                        <div className="min-w-0">
                           <Label className="text-xs text-muted-foreground">Loan Start Date</Label>
                           <Input
                             type="date"
                             value={loan.start_date || ''}
                             onChange={e => updateLoan(idx, 'start_date', e.target.value)}
-                            className="h-9 text-sm mt-1"
+                            className="h-9 text-sm mt-1 w-full min-w-0"
                           />
                         </div>
-                        {/* Paid off so far — an override, not the source of truth.
-                            Progress is worked out from the start date and the per-period
-                            payment; this is only for what that can't know, such as extra
-                            payments or a payroll gap. Left blank, the derived figure is
-                            used, which is the normal case. */}
-                        <div>
+                        {/* Paid off so far fills itself in from the start date and the
+                            per-period payment — that is the normal case, and it is shown
+                            as a real value rather than a placeholder so the number is
+                            visible without anyone having to work it out. Typing replaces
+                            it with an override, for what the calculation can't know
+                            (extra payments, a payroll gap); clearing the box hands it
+                            back to the calculation. */}
+                        <div className="min-w-0">
                           <Label className="text-xs text-muted-foreground">Paid off so far</Label>
                           <div className="relative mt-1">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                             <Input
                               type="number"
-                              placeholder={progress ? progress.derived.toFixed(2) : '0'}
-                              value={loan.repaid === 0 ? '' : (loan.repaid ?? '')}
+                              placeholder="0"
+                              value={
+                                progress?.isOverridden
+                                  ? loan.repaid
+                                  : (progress ? progress.derived.toFixed(2) : '')
+                              }
                               onChange={e => updateLoan(idx, 'repaid', e.target.value)}
-                              className="h-9 text-sm pl-6"
+                              className={`h-9 text-sm pl-6 w-full min-w-0 ${progress?.isOverridden ? '' : 'text-muted-foreground'}`}
                             />
                           </div>
                           <p className="text-[10px] text-muted-foreground mt-1">
-                            {progress?.isOverridden ? 'Overriding the calculated figure' : 'Auto — leave blank'}
+                            {progress?.isOverridden
+                              ? 'Manual — clear to recalculate'
+                              : `Auto from ${progress?.periodsElapsed ?? 0} payments`}
                           </p>
                         </div>
                       </div>
