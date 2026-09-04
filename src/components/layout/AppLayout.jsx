@@ -6,7 +6,6 @@ import NavigationHeader from '@/components/layout/NavigationHeader';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { useProfile } from '@/context/ProfileContext';
-import TrialBanner from '@/components/trial/TrialBanner';
 import PaywallScreen from '@/components/trial/PaywallScreen';
 import { getTrialStatus } from '@/lib/trialUtils';
 
@@ -73,7 +72,6 @@ export default function AppLayout() {
   const tabHistoryRef = useRef({});
   const { activeProfile, isLoading: profileLoading } = useProfile();
   const [paywallDismissed, setPaywallDismissed] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   const isSubPage = !TAB_ORDER.includes(location.pathname);
   const isOnSettings = location.pathname === '/settings';
@@ -106,15 +104,11 @@ export default function AppLayout() {
 
   const trialStatus = getTrialStatus(activeProfile);
   const showPaywall = trialStatus.isExpired && !paywallDismissed;
-  const showBanner = trialStatus.isOnTrial && !bannerDismissed;
 
   return (
     <NotificationProvider>
       <div className="min-h-screen bg-background flex flex-col">
         {!isOnboarding && <NavigationHeader notificationBell={<NotificationBell />} />}
-        {!isOnboarding && showBanner && (
-          <TrialBanner profile={activeProfile} onDismiss={() => setBannerDismissed(true)} />
-        )}
         {showPaywall && (
           <PaywallScreen onContinueFree={() => setPaywallDismissed(true)} />
         )}
