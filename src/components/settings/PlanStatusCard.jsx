@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Clock, Zap } from 'lucide-react';
+import { Shield, Clock } from 'lucide-react';
 import { getTrialStatus } from '@/lib/trialUtils';
 
 export default function PlanStatusCard({ profile }) {
@@ -25,6 +25,13 @@ export default function PlanStatusCard({ profile }) {
 
   }
 
+  // On an active trial there is no upgrade button here.
+  //
+  // The trial exists to let someone use the whole app without being sold to;
+  // putting a gold "Get Lifetime Access" button on the status card meant the
+  // pitch was in front of them from the moment they signed up. What is left is
+  // the fact they need — how much trial is left — and the upsell returns on its
+  // own when the trial expires, via PaywallScreen and the feature gates.
   if (isOnTrial) {
     const isLastDay = daysRemaining === 1;
     return (
@@ -35,7 +42,7 @@ export default function PlanStatusCard({ profile }) {
           border: `1px solid ${isLastDay ? 'rgba(185,60,20,0.35)' : 'rgba(34,197,94,0.25)'}`
         }}>
         
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3">
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
             style={{ background: isLastDay ? 'rgba(185,60,20,0.15)' : 'rgba(34,197,94,0.12)' }}>
@@ -49,12 +56,6 @@ export default function PlanStatusCard({ profile }) {
             <p className="text-xs text-muted-foreground">Full access during your trial</p>
           </div>
         </div>
-        <button
-          className="w-full py-2.5 rounded-lg text-sm font-bold"
-          style={{ background: 'linear-gradient(135deg, #FFD700, #C9A832)', color: '#000' }}>
-          
-          Get Lifetime Access — $14.99
-        </button>
       </div>);
 
   }

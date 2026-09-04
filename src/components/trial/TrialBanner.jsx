@@ -23,23 +23,18 @@ export default function TrialBanner({ profile, onDismiss }) {
       <div className="flex items-center gap-2 flex-1 min-w-0">
         {isLastDay ? (
           <span className="text-xs font-semibold text-orange-200 leading-tight">
-            ⚠️ Trial ends <strong>tomorrow</strong> — then $14.99 for lifetime access
+            ⚠️ Your free trial ends <strong>tomorrow</strong>
           </span>
         ) : (
           <span className="text-xs font-semibold text-green-200">
-            🎉 Free Trial — <strong>{daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining</strong> — then $14.99 for lifetime access
+            🎉 Free Trial — <strong>{daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining</strong> — full access to everything
           </span>
         )}
       </div>
-      {isLastDay && (
-        <button
-          className="flex-shrink-0 px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap"
-          style={{ background: '#FFD700', color: '#000' }}
-        >
-          Get Pro $14.99
-        </button>
-      )}
-      {onDismiss && !isLastDay && (
+      {/* No gold "Get Pro" button here either — see PlanStatusCard. The banner
+          says how long is left, which is what someone on a trial needs to know;
+          it doesn't sell to them while they are still trying the thing. */}
+      {onDismiss && (
         <button onClick={onDismiss} className="flex-shrink-0 p-1 opacity-60 hover:opacity-100">
           <X className="w-4 h-4 text-green-200" />
         </button>
