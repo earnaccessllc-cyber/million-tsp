@@ -57,8 +57,11 @@ export default function OnboardingFlow() {
       const mfwBal = form.has_mfw ? (parseDollar(form.mfw_balance) || 0) : 0;
       const balanceGoal = parseDollar(form.balance_goal) || 1000000;
       const today = new Date().toISOString().split('T')[0];
+      // Temporarily extended for the App Store review period — App Review
+      // may take longer than the normal 3-day trial to get to the app.
+      // TODO: revert to 3 once the app is approved.
       const trialEnd = new Date();
-      trialEnd.setDate(trialEnd.getDate() + 3);
+      trialEnd.setDate(trialEnd.getDate() + 30);
       const trialEndDate = trialEnd.toISOString().split('T')[0];
 
       // Check if a profile already exists — update it instead of creating a duplicate
