@@ -13,11 +13,21 @@ function jsonResponse(body, status = 200) {
 }
 
 // Sends each profile's nightly balance summary email at whatever time they've
-// chosen (notif_email_time, set in Notification Preferences). Polled every 15
+// chosen (notif_email_time, set in Notification Preferences). Polled every two
 // minutes by cron rather than run once at a fixed hour, since different users
 // can pick different times — "due and not yet sent today" is checked on each
 // poll, so a profile gets exactly one email per day, at or shortly after its
 // configured time.
+//
+// Only on days the market is open. The mail exists to report a close, and a
+// weekend or holiday has no close of its own: sending on one either repeats
+// Friday's figures under Saturday's date or, worse, reads as though something
+// moved when nothing did. Those days are skipped outright and the next market
+// day's mail carries the move.
+//
+// The poll interval is what decides how close to the configured time the mail
+// actually lands, since a tick can only send once the day's prices exist. At
+// two minutes a 20:50 setting delivers at 20:50-20:52 on a normal night.
 function isDST(date) {
   const year = date.getUTCFullYear();
   const marchSecondSun = nthSundayOfMonth(year, 2, 2);
@@ -126,6 +136,19 @@ Deno.serve(async (req) => {
     const today = etNow.toISOString().split('T')[0];
     const currentHHMM = etNow.toISOString().split('T')[1].slice(0, 5);
 
+    // Nothing to report on a day with no close. Checked before the profile
+    // query so a weekend costs one date comparison rather than a table scan.
+    if (!isMarketDay(today)) {
+      return jsonResponse({
+        success: true,
+        date: today,
+        currentTime: currentHHMM,
+        emailsSent: 0,
+        skipped: true,
+        reason: 'Market closed — no close to report',
+      });
+    }
+
     const { data: profiles } = await adminClient
       .from('tsp_profiles')
       .select('*')
@@ -156,10 +179,9 @@ Deno.serve(async (req) => {
           .eq('profile_id', profile.id)
           .eq('is_selected', true);
 
-        // The most recently priced market day at or before now. On a market
-        // day this should be today once pricing has landed (enforced just
-        // below); on a weekend or holiday it is the last close before it, which
-        // is what the mail then reports and labels.
+        // The most recently priced market day at or before now — today once
+        // pricing has landed, which the check just below insists on before any
+        // mail goes out.
         const { data: latestBals } = await adminClient
           .from('daily_balances')
           .select('*')
@@ -171,15 +193,17 @@ Deno.serve(async (req) => {
         const asOfDate = todayBal?.date || profile.balance_last_confirmed || today;
 
         // The due time is "not before this", not "send now". It is set just
-        // after the price sheet publishes (~8:49pm Central), so on a market day
-        // the mail should carry that day's close — if the latest priced day
-        // still isn't today, pricing hasn't landed yet and this tick defers to
-        // the next one a few minutes later.
+        // after the price sheet publishes (~8:49pm ET), so the mail should
+        // carry that day's close — if the latest priced day still isn't today,
+        // pricing hasn't landed yet and this tick defers to the next one two
+        // minutes later. Whichever tick first sees today's prices is the one
+        // that sends, which is why the mail tracks the publish rather than the
+        // clock.
         //
-        // Non-market days are exempt: no row is ever coming for a weekend or
-        // holiday, so gating there would suppress the mail rather than delay
-        // it. Those send the most recent close, labelled with its own date.
-        if (isMarketDay(today) && asOfDate !== today) {
+        // The day itself is already known to be a market day, checked once
+        // above, so a missing row here always means "not yet" and never
+        // "not coming".
+        if (asOfDate !== today) {
           results.push({
             profile_id: profile.id,
             skipped: true,

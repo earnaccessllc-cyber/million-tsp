@@ -21,25 +21,41 @@
 -- tsp.gov.
 --
 -- MEASURED: the sheet's "Last Updated" stamp has read 8:49:21 PM and 8:49:22 PM
--- on separate days — a fixed daily refresh — and the evidence says that stamp
--- is CENTRAL, not Eastern. On 8/22 the 01:00 UTC run read the previous day's
--- prices; 01:00 UTC is 8:49pm-plus-11-minutes only if the stamp is Eastern, so
--- it can't be. Under Central it lands at 01:49 UTC, 11 minutes AFTER that run —
--- which matches what the job actually saw. Confirmed from the other side on
--- 8/26: the 02:00 UTC run (11 minutes past 01:49) succeeded first try.
+-- on separate days — a fixed daily refresh — and that stamp is EASTERN.
 --
--- So the earliest the data can exist is ~8:50pm Central. A run at 8:00pm
--- Central is 49 minutes too early and can only ever skip.
+-- This file previously concluded Central, reasoning from a single failure on
+-- 8/22 where the 01:00 UTC run read the previous day's prices. Four
+-- consecutive market days of daily_balances.created_date since then say
+-- otherwise, and they say it decisively:
 --
--- It is now POLLED rather than run at fixed times, so the balance moves as
--- soon as the price does instead of waiting for the next scheduled slot:
---   */2 over 01:00-02:58 UTC          — every 2 minutes across the publish window
+--   2026-08-31   01:00:07 UTC       2026-09-02   01:00:07 UTC
+--   2026-09-01   01:00:08 UTC       2026-09-03   01:00:09 UTC
+--
+-- 01:00 UTC was the FIRST poll of the old window, and every one of those rows
+-- was written seven to nine seconds into it — first try, no retry. Under the
+-- Central theory the sheet would not publish until 01:49 UTC, so that first
+-- poll would fail the sheet-date check every night and the row would land at
+-- ~01:50. It never does. The 8/22 failure was a late publish or a cached read,
+-- not a timezone.
+--
+-- So the data exists by ~8:49pm EASTERN (00:49 UTC under EDT), and a poll at
+-- 8:50pm ET is the earliest one that can succeed.
+--
+-- It is POLLED rather than run at fixed times, so the balance moves as soon as
+-- the price does instead of waiting for the next scheduled slot:
+--   */2 over 00:00-02:58 UTC          — every 2 minutes across the publish window
 --   03:00-03:40 UTC every 10 minutes  — tail, before the ET date boundary
+--
+-- The window starts at hour 0 UTC specifically so 00:50 UTC — 8:50pm ET, one
+-- minute after the publish stamp — is polled. It used to start at 01:00 UTC,
+-- which meant the earliest the balance could move was 9:00pm ET and the
+-- nightly email, due at 8:50pm, always waited ten minutes for pricing that
+-- had in fact been sitting there the whole time.
 --
 -- Polling every 2 minutes is what makes this land within ~2 minutes of the
 -- sheet publishing, and it covers BOTH daylight regimes without editing the
--- cron twice a year: an 8:49pm Central publish is 01:49 UTC under CDT and
--- 02:49 UTC under CST, and the window spans both.
+-- cron twice a year: an 8:49pm Eastern publish is 00:49 UTC under EDT and
+-- 01:49 UTC under EST, and the window spans both.
 --
 -- Polls cost almost nothing because both halves short-circuit:
 --   - before the sheet publishes, the sheet-date check returns before any
@@ -65,7 +81,7 @@
 -- prices with the wrong date.
 
 -- select cron.schedule(
---   'daily-price-update', '*/2 1,2 * * *', $$
+--   'daily-price-update', '*/2 0,1,2 * * *', $$
 --   select net.http_post(
 --     url := 'https://<project-ref>.supabase.co/functions/v1/dailyPriceUpdate',
 --     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
@@ -132,8 +148,15 @@
 --   $$
 -- );
 
+-- nightlyEmailJob is polled rather than scheduled, because each profile picks
+-- its own send time (notif_email_time) and a tick can only send once that
+-- day's prices exist. The interval is therefore the mail's worst-case
+-- lateness: at */15 a 20:50 setting could deliver as late as 21:05. */2 keeps
+-- it inside two minutes of both the configured time and the price publish,
+-- which is what "8:50pm" has to mean in practice. The function itself skips
+-- weekends and holidays outright — there is no close to report on those.
 -- select cron.schedule(
---   'nightly-email-job', '*/15 * * * *', $$
+--   'nightly-email-job', '*/2 * * * *', $$
 --   select net.http_post(
 --     url := 'https://<project-ref>.supabase.co/functions/v1/nightlyEmailJob',
 --     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <anon-key>','apikey','<anon-key>'),
