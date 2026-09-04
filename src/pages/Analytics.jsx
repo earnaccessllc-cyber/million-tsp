@@ -35,7 +35,7 @@ export default function Analytics() {
   // Was `plan === 'paid'`, which ignored an active trial — this page alone
   // locked out trial users that every other screen let straight in. Declared
   // above the early return: hooks must run in the same order every render.
-  const { allowed: canUseAnalytics } = useFeature('analytics');
+  const { allowed: canUseAnalytics, loading: planLoading } = useFeature('analytics');
 
   if (!activeProfile) return <OnboardingPrompt />;
   const selectedFunds = funds.filter(f => f.is_selected);
@@ -48,7 +48,7 @@ export default function Analytics() {
       {!canUseAnalytics ? (
         <div className="space-y-4">
           <PerformanceHistory profile={activeProfile} dailyBalances={dailyBalances} />
-          <UpgradePrompt feature="analytics" />
+          {!planLoading && <UpgradePrompt feature="analytics" />}
         </div>
       ) : (
         <Tabs defaultValue="optimizer" className="w-full">

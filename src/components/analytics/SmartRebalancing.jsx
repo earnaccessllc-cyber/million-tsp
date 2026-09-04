@@ -8,9 +8,12 @@ const DEFAULT_TARGETS = {
 };
 
 export default function SmartRebalancing({ profile, funds }) {
-  const { isPro } = useProStatus();
+  const { isPro, loading: planLoading } = useProStatus();
   const [targets, setTargets] = useState({});
 
+  // Nothing at all until the plan is known — showing the gate first would
+  // flash an upsell at a trial or paid user on every mount.
+  if (planLoading) return null;
   if (!isPro) return <ProGate feature="smart_rebalancing" />;
 
   if (!funds || funds.length === 0) {

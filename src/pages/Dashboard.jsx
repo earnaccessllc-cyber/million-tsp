@@ -22,7 +22,7 @@ export default function Dashboard() {
   // Hooks must run before the early returns below, so they live up here.
   const { allowed: canSeeGoal } = useFeature('goal_tracking');
   const { allowed: canSeeCountdown } = useFeature('retirement_countdown');
-  const { allowed: canSeeInsights } = useFeature('dashboard_insights');
+  const { allowed: canSeeInsights, loading: planLoading } = useFeature('dashboard_insights');
   const { allowed: canSeeDailyLog } = useFeature('daily_log');
   const { data: funds = [] } = useQuery({
     queryKey: ['fund-allocations', activeProfile?.id],
@@ -106,7 +106,7 @@ export default function Dashboard() {
         </>
       ) : (
         <div className="mx-4 mt-4">
-          <UpgradePrompt feature="dashboard_insights" />
+          {!planLoading && <UpgradePrompt feature="dashboard_insights" />}
         </div>
       )}
 

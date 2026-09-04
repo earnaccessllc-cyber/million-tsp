@@ -34,12 +34,15 @@ function calcRMD(balance, age) {
 }
 
 export default function TaxEstimator() {
-  const { isPro } = useProStatus();
+  const { isPro, loading: planLoading } = useProStatus();
   const { activeProfile } = useProfile();
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
   const [otherIncome, setOtherIncome] = useState('');
   const [state, setState] = useState('');
 
+  // Nothing at all until the plan is known — showing the gate first would
+  // flash an upsell at a trial or paid user on every mount.
+  if (planLoading) return null;
   if (!isPro) {
     return (
       <div className="bg-card rounded-xl border border-border p-4 space-y-3">

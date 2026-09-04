@@ -18,7 +18,10 @@ const COMPARISONS = [
 ];
 
 export default function TSPvsPrivate({ funds }) {
-  const { isPro } = useProStatus();
+  const { isPro, loading: planLoading } = useProStatus();
+  // Nothing at all until the plan is known — showing the gate first would
+  // flash an upsell at a trial or paid user on every mount.
+  if (planLoading) return null;
   if (!isPro) return <ProGate feature="tsp_vs_private" />;
 
   const totalBalance = funds.reduce((s, f) => s + (f.balance || 0), 0);
