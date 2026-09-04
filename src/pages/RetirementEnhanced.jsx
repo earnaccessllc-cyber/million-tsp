@@ -27,7 +27,7 @@ import { getAccountBalance } from '@/lib/accountBalance';
 export default function RetirementEnhanced() {
   const { activeProfile, refreshProfiles } = useProfile();
   const queryClient = useQueryClient();
-  const { allowed: canSeeGoal } = useFeature('goal_tracking');
+  const { allowed: canSeeGoal, loading: planLoading } = useFeature('goal_tracking');
   const { allowed: canSeeBenefits } = useFeature('retirement_benefits');
   const { allowed: canSeeCountdown } = useFeature('retirement_countdown');
   const { allowed: canSeeTools } = useFeature('retirement_tools');
@@ -133,7 +133,7 @@ export default function RetirementEnhanced() {
 
           <TabsContent value="million">
             {!canSeeGoal ? (
-              <UpgradePrompt feature="goal_tracking" />
+              planLoading ? null : <UpgradePrompt feature="goal_tracking" />
             ) : (
               <MillionaireTracker profile={mergedProfile} tspBalance={tspBalance} />
             )}
@@ -141,7 +141,7 @@ export default function RetirementEnhanced() {
 
           <TabsContent value="overview" className="space-y-4">
             {!canSeeBenefits ? (
-              <UpgradePrompt feature="retirement_benefits" />
+              planLoading ? null : <UpgradePrompt feature="retirement_benefits" />
             ) : (
               <>
                 <div className="p-4 bg-card rounded-xl border border-border">
@@ -161,7 +161,7 @@ export default function RetirementEnhanced() {
 
           <TabsContent value="countdown">
             {!canSeeCountdown ? (
-              <UpgradePrompt feature="retirement_countdown" />
+              planLoading ? null : <UpgradePrompt feature="retirement_countdown" />
             ) : (
               <div className="space-y-4">
                 <RetirementCountdown profile={mergedProfile} />
@@ -172,7 +172,7 @@ export default function RetirementEnhanced() {
 
           <TabsContent value="tools" className="space-y-4">
             {!canSeeTools ? (
-              <UpgradePrompt feature="retirement_tools" />
+              planLoading ? null : <UpgradePrompt feature="retirement_tools" />
             ) : (
               <TSPLoanCalculator profile={mergedProfile} tspBalance={tspBalance} />
             )}

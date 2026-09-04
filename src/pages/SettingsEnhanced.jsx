@@ -30,7 +30,7 @@ export default function SettingsEnhanced() {
   const [resetting, setResetting] = useState(false);
 
   const setupComplete = !!activeProfile;
-  const { allowed: isPaid } = useFeature('notifications');
+  const { allowed: isPaid, loading: planLoading } = useFeature('notifications');
 
   const handleResetAccount = async () => {
     setResetting(true);
@@ -74,7 +74,7 @@ export default function SettingsEnhanced() {
             <TaxEstimator />
           </>
         ) : (
-          <UpgradePrompt feature="notifications" />
+          planLoading ? null : <UpgradePrompt feature="notifications" />
         )}
         <AppGuide />
 

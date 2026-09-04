@@ -54,7 +54,10 @@ function calcScore(profile, funds, totalBalance) {
 }
 
 export default function FinancialFitnessScore({ profile, funds, totalBalance }) {
-  const { isPro } = useProStatus();
+  const { isPro, loading: planLoading } = useProStatus();
+  // Nothing at all until the plan is known — showing the gate first would
+  // flash an upsell at a trial or paid user on every mount.
+  if (planLoading) return null;
   if (!isPro) return <ProGate feature="fitness_score" />;
 
   const { total, components } = calcScore(profile, funds, totalBalance);

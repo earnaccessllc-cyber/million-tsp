@@ -18,11 +18,14 @@ function calcSEPP(balance, age) {
 }
 
 export default function FIRECalculator({ profile, tspBalance }) {
-  const { isPro } = useProStatus();
+  const { isPro, loading: planLoading } = useProStatus();
   const [targetAge, setTargetAge] = useState(55);
   const [annualExpenses, setAnnualExpenses] = useState('');
   const [swr, setSwr] = useState(4);
 
+  // Nothing at all until the plan is known — showing the gate first would
+  // flash an upsell at a trial or paid user on every mount.
+  if (planLoading) return null;
   if (!isPro) return <ProGate feature="fire_calculator" />;
 
   const currentAge = profile.date_of_birth

@@ -55,9 +55,19 @@ export function isFreeFeature(key) {
 
 // Pro is unlocked by a paid plan or an active (unexpired) trial — the same rule
 // PaywallScreen uses to decide whether to show itself.
+//
+// `loading` matters as much as `isPro`. Until the profile arrives there is no
+// plan to read, so hasFullAccess(null) is false — and a gate that treats that
+// as "not Pro" flashes an upgrade box at someone who is mid-trial or has
+// already paid, every time the screen mounts. Not knowing yet is not the same
+// as not being entitled, so callers must render neither the feature nor the
+// upsell until this clears.
 export function useProStatus() {
-  const { activeProfile } = useProfile();
-  return { isPro: hasFullAccess(activeProfile) };
+  const { activeProfile, isLoading } = useProfile();
+  return {
+    isPro: hasFullAccess(activeProfile),
+    loading: isLoading || !activeProfile,
+  };
 }
 
 /**
@@ -66,7 +76,8 @@ export function useProStatus() {
  * and nothing else.
  */
 export function useFeature(key) {
-  const { isPro } = useProStatus();
+  const { isPro, loading } = useProStatus();
   const free = isFreeFeature(key);
-  return { allowed: free || isPro, isPro, free, label: featureLabel(key) };
+  // A free feature is allowed even while loading — it needs no entitlement.
+  return { allowed: free || isPro, isPro, free, loading: loading && !free, label: featureLabel(key) };
 }
