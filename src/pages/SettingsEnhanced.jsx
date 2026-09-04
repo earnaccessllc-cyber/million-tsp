@@ -40,7 +40,20 @@ export default function SettingsEnhanced() {
 
   const handleDeleteAccount = async () => {
     setDeleting(true);
-    await resetAccount();
+    try {
+      // Actually deletes the auth user (via a Supabase Edge Function — the
+      // client can't do this itself, it needs the service-role key). Every
+      // data table cascades off auth.users, so this also wipes all TSP data;
+      // resetAccount() is not needed here.
+      const { data } = await base44.functions.invoke('deleteAccount');
+      if (data?.error) throw new Error(data.error);
+    } catch (e) {
+      console.error('Delete account error:', e);
+      setDeleting(false);
+      return; // leave the dialog/button state alone so the user can see it failed and retry
+    }
+    // The user row (and its session) is gone server-side now — logout() just
+    // clears the local session and sends them to the login screen.
     await base44.auth.logout();
   };
 
