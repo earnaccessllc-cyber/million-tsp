@@ -620,10 +620,18 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const yesterday = new Date(etNow);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
-        const { data: prevBals } = await adminClient.from('daily_balances').select('*').eq('profile_id', profile.id).eq('date', yesterdayStr);
+        // The most recent balance row strictly before today, not the exact
+        // calendar-yesterday date — after a weekend or holiday (no row exists
+        // for that exact date), an exact-date lookup would miss and fall back
+        // to totalManual, which by this point already equals newTotalBalance,
+        // silently zeroing out the reported daily change.
+        const { data: prevBals } = await adminClient
+          .from('daily_balances')
+          .select('*')
+          .eq('profile_id', profile.id)
+          .lt('date', today)
+          .order('date', { ascending: false })
+          .limit(1);
         const prevBal = (prevBals && prevBals.length > 0) ? prevBals[0].balance : (totalManual || newTotalBalance);
         const dailyChange = newTotalBalance - prevBal;
         const dailyChangePct = prevBal > 0 ? (dailyChange / prevBal) * 100 : 0;
