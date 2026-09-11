@@ -364,11 +364,21 @@ Deno.serve(async (req) => {
     // writing yesterday's price under today's date. Bailing out here leaves the
     // day unprocessed so a later run can do it properly with real data, rather
     // than banking stale prices and marking the day done.
+    // A missing sheetDate (no row has "Last Updated" populated on this poll)
+    // means freshness can't be confirmed either — treat that the same as a
+    // confirmed-stale date rather than trusting it, since the sheet is known
+    // to intermittently omit that column, and slipping through here once was
+    // exactly what let an 8:32pm poll (before the ~8:49pm price refresh)
+    // record "today" prices that were actually still yesterday's, sending
+    // the nightly email with a false $0.00 / 0.00% change hours before the
+    // real close was recorded.
     const sheetDate = parseSheetDate(rows);
-    if (sheetDate && sheetDate !== today) {
+    if (sheetDate !== today) {
       return jsonResponse({
         skipped: true,
-        reason: `Price sheet is dated ${sheetDate}, not ${today} — refusing to record stale prices`,
+        reason: sheetDate
+          ? `Price sheet is dated ${sheetDate}, not ${today} — refusing to record stale prices`
+          : `Price sheet has no confirmed date — refusing to record unconfirmed prices`,
         date: today,
         sheetDate,
       });
