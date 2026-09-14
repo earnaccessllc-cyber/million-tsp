@@ -33,3 +33,8 @@ dist-ssr
 base44/.app.jsonc
 # Supabase CLI scratch
 supabase/.temp/
+
+# Android signing (never commit)
+android/keystore.properties
+*.keystore
+*.jks
