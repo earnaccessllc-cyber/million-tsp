@@ -20,6 +20,28 @@ export function ProfileProvider({ children }) {
     localStorage.removeItem('tsp-active-profile');
     localStorage.removeItem('onboardingComplete');
   }, []);
+  
+  // The profile query only ever fetches once per app session (this provider
+  // stays mounted for the whole logged-in lifetime, and refetchOnWindowFocus
+  // is off globally) — so plan/trial changes made outside the app's own
+  // purchase flow (an admin edit, a webhook landing while the app is
+  // backgrounded) never show up until the app is force-quit and reopened.
+  // That's what made a just-upgraded or just-started-trial account keep
+  // showing the Pro paywall: the UI wasn't wrong, it was stale. Refresh on
+  // every return to foreground so the trial/paid state on screen always
+  // matches the database. `visibilitychange` fires for both a backgrounded
+  // native app (Capacitor's WKWebView dispatches it) and a re-focused
+  // browser tab, so this covers native and web without adding a plugin.
+  useEffect(() => {
+    if (!currentUserId) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        queryClient.invalidateQueries({ queryKey: ['tsp-profiles', currentUserId] });
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [currentUserId, queryClient]);
 
   // Base44 entity SDK automatically filters by created_by_id (the logged-in user).
   // We include currentUserId in the query key so React Query never serves a
