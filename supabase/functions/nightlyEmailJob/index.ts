@@ -212,7 +212,17 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const balance = profile.total_balance_manual || 0;
+        // Sourced from the daily_balances row rather than
+        // profile.total_balance_manual: dailyPriceUpdate writes the
+        // daily_balances row FIRST and only updates total_balance_manual in a
+        // separate, later call, so a poll landing in that window would see a
+        // fresh (today-dated) daily_balances row — passing the check above —
+        // while total_balance_manual still held yesterday's figure. That
+        // mismatch is what poisoned notif_last_sent_balance with a stale
+        // value on 2026-09-14, corrupting the next email's reported change.
+        // balance and daily_change are written together in one daily_balances
+        // insert, so reading balance from there can't be caught mid-update.
+        const balance = todayBal?.balance ?? (profile.total_balance_manual || 0);
 
         // Reported change is since the LAST EMAIL, not since the prior
         // trading day's official close (daily_balances). Those two drift
