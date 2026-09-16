@@ -414,19 +414,22 @@ Deno.serve(async (req) => {
         // This job is polled every couple of minutes around the sheet's publish
         // time so the balance moves as soon as the price does. Once a day has
         // been processed at the prices currently on the sheet there is nothing
-        // left to do, so bail before touching anything — otherwise every poll
-        // for the rest of the window rewrites all the same numbers and churns
-        // updated_date. A price that moves again later still gets picked up,
-        // because this only short-circuits while the stored prices already
-        // match the sheet exactly.
+        // left to do on the PRICE side, so bail before touching fund prices —
+        // otherwise every poll for the rest of the window rewrites all the same
+        // numbers and churns updated_date. A price that moves again later still
+        // gets picked up, because this only short-circuits while the stored
+        // prices already match the sheet exactly.
+        //
+        // It must NOT also short-circuit past a contribution/loan payment that
+        // becomes due today: checked further down (duePending), and only when
+        // that is also empty is there truly nothing left to do — the earlier
+        // version of this check skipped before duePending was even computed,
+        // which could silently strand a payment due on a day prices happened
+        // to already match.
         const pricesAlreadyStored = selectedFunds.every(f => {
           const d = fundData[f.fund_name];
           return !d || Number(f.share_price) === Number(d.share_price);
         });
-        if (alreadyProcessedToday && pricesAlreadyStored) {
-          results.push({ profile_id: profile.id, skipped: true, reason: 'Already priced for today at these prices' });
-          continue;
-        }
 
         // Payroll takes the money on the pay date; TSP posts it to the account
         // a few business days later, and buys units at the price on the day it
@@ -506,6 +509,22 @@ Deno.serve(async (req) => {
         }
         const loanRepaymentAmount = duePending.reduce((sum, r) => sum + (Number(r.loan_repayment_amount) || 0), 0);
         const contributionAmount = duePending.reduce((sum, r) => sum + (Number(r.contribution_amount) || 0), 0) + loanRepaymentAmount;
+
+        // Genuinely nothing left to do: today's prices already match the sheet
+        // AND there is no contribution/loan payment due. Stamp
+        // balance_finalized_date so nightlyEmailJob knows this day's balance
+        // has actually settled — as opposed to daily_balances merely having a
+        // row for today, which can still be revised by a later poll (a further
+        // price correction, or a contribution that becomes due). The stamp is
+        // only trustworthy on this branch: a run that just changed something
+        // doesn't know yet whether it's the final value for the night.
+        if (alreadyProcessedToday && pricesAlreadyStored && duePending.length === 0) {
+          if (profile.balance_finalized_date !== today) {
+            await adminClient.from('tsp_profiles').update({ balance_finalized_date: today }).eq('id', profile.id);
+          }
+          results.push({ profile_id: profile.id, skipped: true, reason: 'Already priced for today at these prices, nothing due' });
+          continue;
+        }
 
         // Fallback weighting for distributing today's contribution across funds
         // when allocation_percent isn't set (dollar-entry profiles, or a selected
