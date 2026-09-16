@@ -212,6 +212,25 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // A daily_balances row existing for today isn't enough on its own:
+        // dailyPriceUpdate polls repeatedly through the evening and can
+        // revise that same row again hours later — a further price
+        // correction, or a contribution posting. balance_finalized_date is
+        // only stamped once a poll finds genuinely nothing left to do
+        // (today's prices already stored, no contribution due), which is
+        // the earliest point the balance can be treated as settled.
+        // Confirmed 2026-09-15: without this, the mail sent at its 8:50pm ET
+        // due time captured a balance that a later same-night poll (11:30pm
+        // ET) superseded by $2,342.73.
+        if (profile.balance_finalized_date !== today) {
+          results.push({
+            profile_id: profile.id,
+            skipped: true,
+            reason: `Waiting for ${today} pricing to settle before emailing (latest priced ${asOfDate}, not yet finalized, now ${currentHHMM})`,
+          });
+          continue;
+        }
+
         // Sourced from the daily_balances row rather than
         // profile.total_balance_manual: dailyPriceUpdate writes the
         // daily_balances row FIRST and only updates total_balance_manual in a
