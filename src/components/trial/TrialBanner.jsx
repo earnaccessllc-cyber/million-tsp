@@ -11,12 +11,12 @@ import { getTrialStatus } from '@/lib/trialUtils';
 // and in PlanStatusCard for why: the trial is meant to be used without being
 // sold to, and the upsell already lives in PaywallScreen once it expires.
 const TRIAL_FEATURES = [
-  { icon: Calendar, text: 'Retirement countdown & eligibility' },
-  { icon: TrendingUp, text: 'Full daily balance history & YTD activity' },
-  { icon: Shield, text: 'Sick leave credits & pension calculator' },
-  { icon: Zap, text: 'TSP loan, FIRE calculator & income timeline' },
-  { icon: Target, text: 'Contribution optimizer, risk scoring & fund analytics' },
-  { icon: Clock, text: 'AI TSP coach, tax estimator & smart rebalancing' },
+  { icon: Calendar, text: 'Retirement countdown, pension calculator & income timeline' },
+  { icon: TrendingUp, text: 'Full daily balance history, sick leave credits & YTD activity' },
+  { icon: Shield, text: 'TSP loan calculator & planning tools' },
+  { icon: Zap, text: 'FIRE calculator & TSP vs. private sector comparison' },
+  { icon: Target, text: 'Contribution optimizer, risk scoring, fund analytics & smart rebalancing' },
+  { icon: Clock, text: 'Notifications, tax estimator & financial fitness score' },
 ];
 
 export default function TrialBanner({ profile, onDismiss }) {
