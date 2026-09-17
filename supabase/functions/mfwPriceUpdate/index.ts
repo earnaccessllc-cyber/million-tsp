@@ -206,10 +206,21 @@ Deno.serve(async (req) => {
         if (existingBal && existingBal.length > 0) {
           const bal = existingBal[0];
           const newBal = bal.balance + mfwDelta;
+          const newDailyChange = (bal.daily_change || 0) + mfwDelta;
+          // The prior close this row's daily_change was struck against —
+          // recovered from the row itself (balance minus the change already
+          // recorded) rather than re-queried, so this stays consistent with
+          // whatever dailyPriceUpdate last computed it from. daily_change was
+          // being patched by mfwDelta here without daily_change_percent ever
+          // following it, so the email's reported percent went stale (often to
+          // ~0, since the percent field kept whatever it was before the MFW
+          // delta landed) even though the dollar change was correct.
+          const priorClose = bal.balance - (bal.daily_change || 0);
           await adminClient.from('daily_balances').update({
             balance: newBal,
-            daily_change: (bal.daily_change || 0) + mfwDelta,
-            is_gain: ((bal.daily_change || 0) + mfwDelta) >= 0,
+            daily_change: newDailyChange,
+            daily_change_percent: priorClose > 0 ? (newDailyChange / priorClose) * 100 : (bal.daily_change_percent || 0),
+            is_gain: newDailyChange >= 0,
           }).eq('id', bal.id);
         }
 
