@@ -552,6 +552,19 @@ Deno.serve(async (req) => {
           // always the price that stored balance was struck at.
           const storedPrice = fund.share_price > 0 ? fund.share_price : 0;
           const prevPrice = storedPrice || newPrice;
+          // Whether the sheet's price for this fund actually differs from what
+          // was already stored. This run can reach here (past the short-circuit
+          // above) for a reason that has nothing to do with THIS fund's price —
+          // most commonly a contribution/loan payment becoming due after an
+          // earlier run already applied today's real price move. In that case
+          // storedPrice is no longer yesterday's close; it's already today's
+          // price from the earlier run, so comparing against it would compute a
+          // move of exactly zero and stomp the correct return that earlier run
+          // recorded. Confirmed 2026-09-16: every selected fund showed +0.00%
+          // in the nightly email despite the total balance moving, because a
+          // same-day contribution-triggered rerun overwrote daily_return_percent
+          // this way.
+          const priceChangedThisRun = storedPrice > 0 && Number(storedPrice) !== Number(newPrice);
           // Derive the day's move from the two actual prices rather than the
           // sheet's "Day %" column. That column is rounded to two decimals
           // (-0.86, 0.23, -1.17), and it is published independently of the price
@@ -560,8 +573,14 @@ Deno.serve(async (req) => {
           // to be baked permanently into the balance. Only fall back to it when
           // there's no prior price to measure against.
           const dailyReturn = storedPrice > 0
-            ? ((newPrice - storedPrice) / storedPrice) * 100
+            ? (priceChangedThisRun ? ((newPrice - storedPrice) / storedPrice) * 100 : (fund.daily_return_percent ?? 0))
             : (data.daily_change_percent ?? 0);
+          // previous_share_price is meant to hold the LAST DIFFERENT price (the
+          // true prior close to compare against), not "whatever share_price
+          // held right before this write" — otherwise a same-day rerun with no
+          // real price change would advance it to today's price too, and the
+          // next real move would compute against itself.
+          const previousShareForRecord = priceChangedThisRun ? prevPrice : (fund.previous_share_price || prevPrice);
           const jan1Price = (fund.jan1_share_price && fund.jan1_share_price > 0) ? fund.jan1_share_price : (JAN1_PRICES[fund.fund_name] || newPrice);
           const ytdReturn = jan1Price > 0 ? ((newPrice - jan1Price) / jan1Price) * 100 : 0;
 
@@ -602,7 +621,7 @@ Deno.serve(async (req) => {
 
           await adminClient.from('fund_allocations').update({
             share_price: newPrice,
-            previous_share_price: prevPrice,
+            previous_share_price: previousShareForRecord,
             jan1_share_price: jan1Price,
             balance: newBalance,
             dollar_balance: newBalance,
