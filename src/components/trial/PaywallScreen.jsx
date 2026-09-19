@@ -66,7 +66,7 @@ export default function PaywallScreen({ onContinueFree }) {
           >
             $19.99
           </p>
-          <p className="text-xs text-muted-foreground mt-1">one-time · no subscription · forever</p>
+          <p className="text-xs text-muted-foreground mt-1">one-time purchase · yours forever</p>
         </div>
 
         {/* Features */}
@@ -137,7 +137,7 @@ export default function PaywallScreen({ onContinueFree }) {
         )}
 
         <p className="text-center text-xs text-muted-foreground mt-4 opacity-50">
-          Secure one-time payment. No hidden fees. No recurring charges.
+          Secure one-time purchase. No hidden fees.
         </p>
       </div>
     </motion.div>
