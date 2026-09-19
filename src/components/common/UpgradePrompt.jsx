@@ -16,7 +16,7 @@ export default function UpgradePrompt({ feature = 'this feature' }) {
       <div>
         <h3 className="font-bold text-sm mb-0.5">{PLAN_NAME}</h3>
         <p className="text-xs text-muted-foreground">
-          {label} is included in {PLAN_NAME}. Upgrade once for lifetime access — no subscription, no recurring fees.
+          {label} is included in {PLAN_NAME}. Unlock it with a single one-time purchase and keep it forever.
         </p>
       </div>
       <div className="w-full px-2">
