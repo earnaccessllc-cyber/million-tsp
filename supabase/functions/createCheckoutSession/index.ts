@@ -23,10 +23,17 @@ function jsonResponse(body, status = 200) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  // Tracks which step we were on so a thrown error can be located in the logs.
+  let stage = 'start';
+  let keyPrefix = 'none';
+
   try {
     const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
     if (!stripeSecretKey) return jsonResponse({ error: 'STRIPE_SECRET_KEY not configured' }, 200);
+    // First 7 chars only (e.g. "sk_test" / "sk_live") — never the key itself.
+    keyPrefix = stripeSecretKey.slice(0, 7);
 
+    stage = 'auth';
     const authHeader = req.headers.get('Authorization') ?? '';
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
@@ -36,17 +43,30 @@ Deno.serve(async (req) => {
     const { data: { user } } = await userClient.auth.getUser();
     if (!user) return jsonResponse({ error: 'Unauthorized' }, 401);
 
-    const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-11-20.acacia' });
+    // Managed Payments requires API version 2025-03-31.basil or newer.
+    stage = 'stripe-init';
+    const stripe = new Stripe(stripeSecretKey, {
+      apiVersion: '2025-03-31.basil',
+      httpClient: Stripe.createFetchHttpClient(),
+    });
 
     const origin = req.headers.get('origin') || Deno.env.get('APP_URL') || 'https://milliontsp.com';
 
+    // Uses Stripe Managed Payments (on by default for this account): Stripe is
+    // the merchant of record and picks the payment methods, so no
+    // payment_method_types here, and every line item needs an eligible product
+    // tax code. txcd_10103000 = Software as a service - personal use. Change the
+    // code if a different Managed Payments category fits the product better.
+    stage = 'stripe-create-session';
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      payment_method_types: ['card'],
       line_items: [{
         price_data: {
           currency: 'usd',
-          product_data: { name: 'MillionTSP Pro — Lifetime Access' },
+          product_data: {
+            name: 'MillionTSP Pro — Lifetime Access',
+            tax_code: 'txcd_10103000',
+          },
           unit_amount: 1999,
         },
         quantity: 1,
@@ -59,6 +79,15 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ url: session.url });
   } catch (error) {
+    console.error('createCheckoutSession failed', JSON.stringify({
+      stage,
+      keyPrefix,
+      name: error?.name,
+      type: error?.type,
+      code: error?.code,
+      statusCode: error?.statusCode,
+      message: error?.message,
+    }));
     return jsonResponse({ error: error.message }, 500);
   }
 });

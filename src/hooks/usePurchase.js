@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useProfile } from '@/context/ProfileContext';
-import { base44 } from '@/api/base44Client';
-import { isNative, purchaseLifetime } from '@/lib/purchases';
+import { useAuth } from '@/lib/AuthContext';
+import { isNative, purchaseLifetime, claimPurchase } from '@/lib/purchases';
 import { useCheckout } from '@/hooks/useCheckout';
 
 // Drop-in replacement for useCheckout with the same { startCheckout, loading,
@@ -12,14 +12,15 @@ import { useCheckout } from '@/hooks/useCheckout';
 // via RevenueCat, which Apple requires for unlocking in-app digital
 // features. On web it falls back to the existing Stripe checkout unchanged.
 //
-// Access is granted client-side here, right after RevenueCat confirms the
-// entitlement is active (which itself only happens after Apple/Google
-// validate the purchase) — simple and enough for now. A RevenueCat webhook
-// into a Supabase function (mirroring how stripeWebhook already works for
-// the web flow) would be the more tamper-resistant long-term setup.
+// Access is granted server-side: once RevenueCat reports the entitlement
+// active locally, claimPurchase() calls the verifyPurchase edge function,
+// which re-checks it against RevenueCat's REST API and flips the profile to
+// plan='paid' with the service role (mirroring how stripeWebhook works for
+// the web flow). The client can't write plan='paid' itself (migration 0012).
 export function usePurchase() {
   const webCheckout = useCheckout();
-  const { activeProfile, refreshProfiles } = useProfile();
+  const { refreshProfiles } = useProfile();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -29,15 +30,17 @@ export function usePurchase() {
     setLoading(true);
     setError('');
     try {
-      const { success, reason } = await purchaseLifetime();
+      const { success, reason } = await purchaseLifetime(user?.id);
       if (!success) {
         if (reason !== 'cancelled') setError(reason || 'Purchase could not be completed.');
         return;
       }
-      if (activeProfile) {
-        await base44.entities.TSPProfile.update(activeProfile.id, { plan: 'paid' });
-        await refreshProfiles();
+      const granted = await claimPurchase();
+      if (!granted) {
+        setError('Purchase completed but access could not be confirmed. Please tap Restore Purchases or contact support.');
+        return;
       }
+      await refreshProfiles();
     } catch (e) {
       setError(e.message || 'Purchase could not be completed.');
     } finally {

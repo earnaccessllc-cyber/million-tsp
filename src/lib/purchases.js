@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { Purchases } from '@revenuecat/purchases-capacitor';
+import { base44 } from '@/api/base44Client';
 
 // These three identifiers come from the RevenueCat dashboard (Million TSP
 // project) — confirmed against the live "default" offering on 2026-08-28.
@@ -33,6 +34,30 @@ export async function initPurchases() {
   }
 }
 
+/**
+ * Ties RevenueCat to the signed-in Supabase user (app_user_id = user id) so
+ * the verifyPurchase edge function can look the purchase up server-side.
+ * Must run before any purchase/restore.
+ */
+async function identifyUser(userId) {
+  if (!userId) return;
+  try {
+    await Purchases.logIn({ appUserID: userId });
+  } catch (e) {
+    console.error('Purchases.logIn failed:', e);
+  }
+}
+
+/**
+ * Asks the server to confirm the RevenueCat entitlement and grant Pro. The
+ * client can no longer write plan='paid' itself (see migration 0012).
+ * Returns true when the server confirmed the purchase.
+ */
+export async function claimPurchase() {
+  const { data } = await base44.functions.invoke('verifyPurchase', {});
+  return !!data?.paid;
+}
+
 function hasEntitlement(customerInfo) {
   return !!customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
 }
@@ -46,9 +71,10 @@ function hasEntitlement(customerInfo) {
  * reason === 'cancelled' means the user backed out of the native purchase
  * sheet themselves — callers should treat that as silent, not an error.
  */
-export async function purchaseLifetime() {
+export async function purchaseLifetime(userId) {
   if (!isNative()) return { success: false, reason: 'Not available on this platform.' };
   await initPurchases();
+  await identifyUser(userId);
 
   try {
     const { current, all } = await Purchases.getOfferings();
@@ -77,9 +103,10 @@ export async function purchaseLifetime() {
  * paid unlock, so a user who reinstalls or switches devices doesn't have to
  * pay twice.
  */
-export async function restorePurchases() {
+export async function restorePurchases(userId) {
   if (!isNative()) return { success: false, reason: 'Not available on this platform.' };
   await initPurchases();
+  await identifyUser(userId);
   try {
     const { customerInfo } = await Purchases.restorePurchases();
     if (hasEntitlement(customerInfo)) return { success: true, customerInfo };

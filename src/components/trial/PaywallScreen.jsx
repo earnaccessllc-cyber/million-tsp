@@ -2,7 +2,9 @@ import React from 'react';
 import { CheckCircle, Zap, Shield, Target, TrendingUp, Calendar, Clock, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { usePurchase } from '@/hooks/usePurchase';
-import { isNative, restorePurchases } from '@/lib/purchases';
+import { useAuth } from '@/lib/AuthContext';
+import { useProfile } from '@/context/ProfileContext';
+import { isNative, restorePurchases, claimPurchase } from '@/lib/purchases';
 
 const PRO_FEATURES = [
   { icon: Calendar, text: 'Retirement countdown, pension calculator & income timeline' },
@@ -15,14 +17,25 @@ const PRO_FEATURES = [
 
 export default function PaywallScreen({ onContinueFree }) {
   const { startCheckout, loading, error } = usePurchase();
+  const { user } = useAuth();
+  const { refreshProfiles } = useProfile();
   const [restoring, setRestoring] = React.useState(false);
   const [restoreMessage, setRestoreMessage] = React.useState('');
 
   const handleRestore = async () => {
     setRestoring(true);
     setRestoreMessage('');
-    const { success, reason } = await restorePurchases();
-    setRestoreMessage(success ? 'Purchase restored — welcome back!' : (reason || 'Restore failed.'));
+    const { success, reason } = await restorePurchases(user?.id);
+    let message = success ? 'Purchase restored — welcome back!' : (reason || 'Restore failed.');
+    if (success) {
+      try {
+        if (await claimPurchase()) await refreshProfiles();
+        else message = 'Purchase found but access could not be confirmed. Please contact support.';
+      } catch (e) {
+        message = e.message || 'Restore failed. Please try again.';
+      }
+    }
+    setRestoreMessage(message);
     setRestoring(false);
   };
 
