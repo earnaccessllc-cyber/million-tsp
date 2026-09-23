@@ -129,12 +129,12 @@ export default function AccountSetupForm() {
       const existingProfiles = await base44.entities.TSPProfile.list();
       const existingProfile = existingProfiles[0] || null;
       // Mirrors OnboardingFlow's trial grant: a brand-new profile (no prior
-      // row that already used its trial) gets 30 days of full access. This
+      // row that already used its trial) gets 7 days of full access. This
       // form is the other place a first-time profile gets created (Settings,
       // when no profile exists yet), and it was skipping the trial entirely.
       const hadTrial = existingProfile ? existingProfile.trial_used === true : false;
       const trialEnd = new Date();
-      trialEnd.setDate(trialEnd.getDate() + 30);
+      trialEnd.setDate(trialEnd.getDate() + 7);
       const trialEndDate = trialEnd.toISOString().split('T')[0];
 
       const profileData = {
