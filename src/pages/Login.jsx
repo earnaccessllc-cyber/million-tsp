@@ -186,8 +186,7 @@ function SignupScreen({ onGoLogin, onVerify }) {
       </button>
 
       <p className="text-center text-xs font-rajdhani" style={{ color: 'rgba(255,255,255,0.4)' }}>
-        {/* TODO: change back to 3-day once the app is approved */}
-        Start your 30-day free trial. No credit card required.
+        Start your 7-day free trial. No credit card required.
       </p>
 
       <p className="text-center text-sm font-rajdhani" style={{ color: 'rgba(255,255,255,0.5)' }}>
@@ -378,10 +377,9 @@ export default function Login() {
         <Logo />
 
         {(screen === 'login' || screen === 'signup') && (
-          // Matches the trial length in OnboardingFlow.jsx — temporarily 30
-          // days for App Store review. TODO: change both back to 3 once approved.
+          // Matches the trial length in OnboardingFlow.jsx / AccountSetupForm.jsx.
           <p className="text-center text-xs font-rajdhani -mt-5 mb-6" style={{ color: 'rgba(255,215,0,0.6)' }}>
-            Free 30-day trial. No credit card required.
+            Free 7-day trial. No credit card required.
           </p>
         )}
 
