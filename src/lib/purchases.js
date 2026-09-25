@@ -62,6 +62,31 @@ function hasEntitlement(customerInfo) {
   return !!customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
 }
 
+async function getLifetimePackage() {
+  const { current, all } = await Purchases.getOfferings();
+  const offering = all?.[OFFERING_ID] || current;
+  return (
+    offering?.lifetime ||
+    offering?.availablePackages?.find(p => p.identifier === LIFETIME_PACKAGE_ID)
+  );
+}
+
+/**
+ * The Lifetime unlock's price as the App Store reports it for the user's
+ * storefront (e.g. "$19.99", "£19.99"), or null when unavailable. Apple
+ * expects the displayed price to match what the purchase sheet charges, so
+ * native UI should show this rather than a hardcoded USD amount.
+ */
+export async function getLifetimePrice() {
+  if (!isNative()) return null;
+  await initPurchases();
+  try {
+    return (await getLifetimePackage())?.product?.priceString || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Runs the real Apple/Google In-App Purchase flow for the one-time Lifetime
  * unlock. Apple requires this path (not a web checkout) for unlocking
@@ -77,12 +102,7 @@ export async function purchaseLifetime(userId) {
   await identifyUser(userId);
 
   try {
-    const { current, all } = await Purchases.getOfferings();
-    const offering = all?.[OFFERING_ID] || current;
-    const pkg =
-      offering?.lifetime ||
-      offering?.availablePackages?.find(p => p.identifier === LIFETIME_PACKAGE_ID);
-
+    const pkg = await getLifetimePackage();
     if (!pkg) {
       return { success: false, reason: 'Lifetime plan is not available right now. Please try again later.' };
     }

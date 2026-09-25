@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
 import { Eye, EyeOff, Shield } from 'lucide-react';
+import Disclaimer from '@/components/common/Disclaimer';
 
 function GoldInput({ type, placeholder, value, onChange, id, rightElement }) {
   return (
@@ -408,6 +409,8 @@ export default function Login() {
             onSuccess={handleAuthSuccess}
           />
         )}
+
+        <Disclaimer className="font-rajdhani mt-8" style={{ color: 'rgba(255,255,255,0.35)' }} />
       </div>
     </div>
   );
