@@ -14,6 +14,7 @@ import TaxEstimator from '@/components/settings/TaxEstimator';
 import AccountSetupForm from '@/components/settings/AccountSetupForm';
 import UpgradePrompt from '@/components/common/UpgradePrompt';
 import PlanStatusCard from '@/components/settings/PlanStatusCard';
+import Disclaimer from '@/components/common/Disclaimer';
 import { Button } from '@/components/ui/button';
 import { LogOut, Trash2, RotateCcw } from 'lucide-react';
 import { useFeature } from '@/lib/proGating';
@@ -27,6 +28,7 @@ import {
 export default function SettingsEnhanced() {
   const { activeProfile, resetAccount } = useProfile();
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [resetting, setResetting] = useState(false);
 
   const setupComplete = !!activeProfile;
@@ -38,9 +40,20 @@ export default function SettingsEnhanced() {
     setResetting(false);
   };
 
+  // Deletes the login itself (server-side, via the deleteAccount edge
+  // function), not just the TSP data — required by App Store Guideline
+  // 5.1.1(v). All user data cascades from the auth user.
   const handleDeleteAccount = async () => {
     setDeleting(true);
-    await resetAccount();
+    setDeleteError('');
+    try {
+      const { data } = await base44.functions.invoke('deleteAccount', {});
+      if (!data?.deleted) throw new Error(data?.error || 'Account could not be deleted.');
+    } catch (e) {
+      setDeleteError(e.message || 'Account could not be deleted. Please try again.');
+      setDeleting(false);
+      return;
+    }
     await base44.auth.logout();
   };
 
@@ -134,7 +147,7 @@ export default function SettingsEnhanced() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete Account?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will permanently delete your TSP profile and all associated data. This action cannot be undone.
+                    This will permanently delete your MillionTSP login, every TSP profile, and all associated data. This action cannot be undone. A Lifetime Pro purchase made through Apple can be restored to a new account with Restore Purchases.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -149,8 +162,11 @@ export default function SettingsEnhanced() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            {deleteError && <p className="text-xs text-destructive text-center">{deleteError}</p>}
           </div>
         </div>
+
+        <Disclaimer className="text-muted-foreground px-2 pb-2" />
       </motion.div>
     </div>
   );

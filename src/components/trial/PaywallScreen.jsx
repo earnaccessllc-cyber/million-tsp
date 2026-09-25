@@ -1,7 +1,7 @@
 import React from 'react';
 import { CheckCircle, Zap, Shield, Target, TrendingUp, Calendar, Clock, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { usePurchase } from '@/hooks/usePurchase';
+import { usePurchase, useLifetimePrice } from '@/hooks/usePurchase';
 import { useAuth } from '@/lib/AuthContext';
 import { useProfile } from '@/context/ProfileContext';
 import { isNative, restorePurchases, claimPurchase } from '@/lib/purchases';
@@ -17,6 +17,7 @@ const PRO_FEATURES = [
 
 export default function PaywallScreen({ onContinueFree }) {
   const { startCheckout, loading, error } = usePurchase();
+  const price = useLifetimePrice();
   const { user } = useAuth();
   const { refreshProfiles } = useProfile();
   const [restoring, setRestoring] = React.useState(false);
@@ -77,7 +78,7 @@ export default function PaywallScreen({ onContinueFree }) {
           <p
             style={{ fontFamily: "'Exo 2',sans-serif", fontSize: 52, fontWeight: 900, color: '#FFD700', lineHeight: 1 }}
           >
-            $19.99
+            {price || '\u00A0'}
           </p>
           <p className="text-xs text-muted-foreground mt-1">one-time purchase · yours forever</p>
         </div>
@@ -98,16 +99,19 @@ export default function PaywallScreen({ onContinueFree }) {
           </div>
         </div>
 
-        {/* Competitor comparison */}
-        <div
-          className="rounded-xl px-4 py-3 mb-5 text-center"
-          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
-        >
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            💡 <span className="text-foreground font-medium">DailyTSP charges $25 for less features.</span><br />
-            We charge <span style={{ color: '#FFD700', fontWeight: 700 }}>$19.99</span> for more.
-          </p>
-        </div>
+        {/* Competitor comparison — web only. Naming another app and a fixed
+            USD price doesn't belong in the App Store build (Guideline 2.3). */}
+        {!isNative() && (
+          <div
+            className="rounded-xl px-4 py-3 mb-5 text-center"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+          >
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              💡 <span className="text-foreground font-medium">DailyTSP charges $25 for less features.</span><br />
+              We charge <span style={{ color: '#FFD700', fontWeight: 700 }}>$19.99</span> for more.
+            </p>
+          </div>
+        )}
 
         {/* CTA */}
         <button
@@ -123,7 +127,7 @@ export default function PaywallScreen({ onContinueFree }) {
           }}
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          {loading ? 'Starting checkout…' : 'Get Lifetime Access — $19.99'}
+          {loading ? 'Starting checkout…' : `Get Lifetime Access${price ? ` — ${price}` : ''}`}
         </button>
         {error && <p className="text-center text-xs mb-3" style={{ color: '#f87171' }}>{error}</p>}
 

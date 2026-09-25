@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useProfile } from '@/context/ProfileContext';
 import { useAuth } from '@/lib/AuthContext';
-import { isNative, purchaseLifetime, claimPurchase } from '@/lib/purchases';
+import { isNative, purchaseLifetime, claimPurchase, getLifetimePrice } from '@/lib/purchases';
 import { useCheckout } from '@/hooks/useCheckout';
 
 // Drop-in replacement for useCheckout with the same { startCheckout, loading,
@@ -49,4 +49,21 @@ export function usePurchase() {
   };
 
   return { startCheckout, loading, error };
+}
+
+// Price as shown on "Get Lifetime Access" buttons. Web charges a fixed USD
+// amount through Stripe. On native it's the App Store's localized price for
+// the user's storefront, so what we display always matches the purchase
+// sheet; null until StoreKit answers (callers then omit the price).
+const WEB_PRICE = '$19.99';
+
+export function useLifetimePrice() {
+  const [price, setPrice] = useState(isNative() ? null : WEB_PRICE);
+  useEffect(() => {
+    if (!isNative()) return;
+    let cancelled = false;
+    getLifetimePrice().then(p => { if (!cancelled) setPrice(p); });
+    return () => { cancelled = true; };
+  }, []);
+  return price;
 }
