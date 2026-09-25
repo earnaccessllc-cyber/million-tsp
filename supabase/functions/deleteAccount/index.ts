@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
     const { error } = await adminClient.auth.admin.deleteUser(user.id);
     if (error) throw error;
 
-    return jsonResponse({ deleted: true });
+    return jsonResponse({ success: true });
   } catch (error) {
     console.error('deleteAccount failed', error?.message);
     return jsonResponse({ error: error.message }, 500);

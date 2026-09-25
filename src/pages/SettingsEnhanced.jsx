@@ -48,7 +48,7 @@ export default function SettingsEnhanced() {
     setDeleteError('');
     try {
       const { data } = await base44.functions.invoke('deleteAccount', {});
-      if (!data?.deleted) throw new Error(data?.error || 'Account could not be deleted.');
+      if (!data?.success) throw new Error(data?.error || 'Account could not be deleted.');
     } catch (e) {
       setDeleteError(e.message || 'Account could not be deleted. Please try again.');
       setDeleting(false);
