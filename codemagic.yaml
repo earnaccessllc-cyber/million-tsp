@@ -14,7 +14,7 @@ workflows:
         APP_VERSION: 1.1.1
         XCODE_WORKSPACE: ios/App/App.xcworkspace
         XCODE_SCHEME: App
-      node: 20
+      node: 22
     scripts:
       - name: Install packages
         script: npm ci
