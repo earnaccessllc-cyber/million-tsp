@@ -3,7 +3,7 @@
   "appName": "MillionFed",
   "webDir": "dist",
   "server": {
-    "url": "https://milliontsp.com",
+    "url": "https://millionfed.com",
     "cleartext": false,
     "androidScheme": "https"
   },

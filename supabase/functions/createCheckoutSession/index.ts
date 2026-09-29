@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
     });
 
-    const origin = req.headers.get('origin') || Deno.env.get('APP_URL') || 'https://milliontsp.com';
+    const origin = req.headers.get('origin') || Deno.env.get('APP_URL') || 'https://millionfed.com';
 
     // Uses Stripe Managed Payments (on by default for this account): Stripe is
     // the merchant of record and picks the payment methods, so no
