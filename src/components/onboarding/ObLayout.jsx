@@ -63,7 +63,7 @@ export function ObMiniLogo() {
           fontFamily: "'Exo 2',sans-serif", fontSize: 14, fontWeight: 900,
           background: GOLD_GRADIENT, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
           letterSpacing: '0.06em',
-        }}>MillionTSP</span>
+        }}>MillionFed</span>
       </div>
     </div>
   );

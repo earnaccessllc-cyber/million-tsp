@@ -1,7 +1,7 @@
 import { useProfile } from '@/context/ProfileContext';
 import { hasFullAccess } from '@/lib/trialUtils';
 
-export const PLAN_NAME = 'MillionTSP Pro';
+export const PLAN_NAME = 'MillionFed Pro';
 
 /**
  * Single source of truth for what the free tier includes.

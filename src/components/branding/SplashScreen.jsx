@@ -149,7 +149,7 @@ export default function SplashScreen({ onComplete }) {
             </svg>
           </motion.div>
 
-          {/* Text: MillionTSP */}
+          {/* Text: MillionFed */}
           <motion.div
             className="flex flex-col items-center mt-6"
             initial={{ opacity: 0, y: 18 }}
@@ -170,7 +170,7 @@ export default function SplashScreen({ onComplete }) {
                 textShadow: 'none',
               }}
             >
-              MillionTSP
+              MillionFed
             </span>
             <span
               style={{

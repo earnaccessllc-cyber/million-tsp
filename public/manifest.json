@@ -1,6 +1,6 @@
 {
-  "name": "MillionTSP",
-  "short_name": "MillionTSP",
+  "name": "MillionFed",
+  "short_name": "MillionFed",
   "description": "TSP tracking and retirement planning for federal employees",
   "start_url": "/",
   "scope": "/",

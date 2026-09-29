@@ -36,7 +36,7 @@ const AuthenticatedApp = () => {
       <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#08080a' }}>
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#C9A832', borderTopColor: 'transparent' }}></div>
-          <span className="text-sm" style={{ color: '#C9A832' }}>Loading MillionTSP...</span>
+          <span className="text-sm" style={{ color: '#C9A832' }}>Loading MillionFed...</span>
         </div>
       </div>
     );

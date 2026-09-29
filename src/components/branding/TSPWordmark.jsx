@@ -63,7 +63,7 @@ export default function TSPWordmark({ size = 'sm', showIcon = true }) {
           ...gradientStyle,
         }}
       >
-        MillionTSP
+        MillionFed
       </span>
     </div>
   );

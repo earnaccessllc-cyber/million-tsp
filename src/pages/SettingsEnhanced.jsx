@@ -147,7 +147,7 @@ export default function SettingsEnhanced() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete Account?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will permanently delete your MillionTSP login, every TSP profile, and all associated data. This action cannot be undone. A Lifetime Pro purchase made through Apple can be restored to a new account with Restore Purchases.
+                    This will permanently delete your MillionFed login, every TSP profile, and all associated data. This action cannot be undone. A Lifetime Pro purchase made through Apple can be restored to a new account with Restore Purchases.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

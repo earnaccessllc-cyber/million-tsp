@@ -87,7 +87,7 @@ function buildEmailHtml({ name, asOfDate, balance, dailyChange, dailyChangePct, 
   return `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;">
     <h2 style="margin:0 0 4px;">${name ? `Hi ${name},` : 'Hi,'}</h2>
-    <p style="color:#666;margin:0 0 20px;">Here's your MillionTSP balance update.</p>
+    <p style="color:#666;margin:0 0 20px;">Here's your MillionFed balance update.</p>
 
     <div style="background:#f7f7f8;border-radius:12px;padding:20px;margin-bottom:20px;">
       <p style="margin:0;color:#666;font-size:13px;">Total Balance${formatMarketDay(asOfDate) ? ` &middot; as of ${formatMarketDay(asOfDate)} close` : ''}</p>
@@ -110,7 +110,7 @@ function buildEmailHtml({ name, asOfDate, balance, dailyChange, dailyChangePct, 
     ${mfwBalance > 0 ? `<p style="color:#666;font-size:13px;">Mutual funds: ${formatCurrency(mfwBalance)}</p>` : ''}
 
     <p style="color:#999;font-size:12px;margin-top:24px;">
-      You're receiving this because nightly balance emails are turned on in your MillionTSP notification settings.${unsubscribeUrl ? `<br><a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a>` : ''}
+      You're receiving this because nightly balance emails are turned on in your MillionFed notification settings.${unsubscribeUrl ? `<br><a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a>` : ''}
     </p>
   </div>
   `;
@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     if (!resendApiKey) return jsonResponse({ error: 'RESEND_API_KEY not configured' }, 200);
 
-    const fromAddress = Deno.env.get('EMAIL_FROM_ADDRESS') || 'MillionTSP <onboarding@resend.dev>';
+    const fromAddress = Deno.env.get('EMAIL_FROM_ADDRESS') || 'MillionFed <onboarding@resend.dev>';
 
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL'),

@@ -72,7 +72,7 @@ export default function Admin() {
       {/* Header */}
       <div className="px-4 pt-8 pb-4 border-b border-yellow-900/40">
         <h1 className="font-orbitron text-2xl font-bold tracking-widest" style={{ color: '#FFD700' }}>
-          MillionTSP Admin
+          MillionFed Admin
         </h1>
         <p className="text-sm text-gray-400 mt-1">User Management</p>
 

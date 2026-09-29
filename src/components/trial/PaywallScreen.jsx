@@ -59,7 +59,7 @@ export default function PaywallScreen({ onContinueFree }) {
           <h1
             style={{ fontFamily: "'Exo 2',sans-serif", fontSize: 26, fontWeight: 900, color: '#fff', lineHeight: 1.2 }}
           >
-            Upgrade to MillionTSP Pro
+            Upgrade to MillionFed Pro
           </h1>
           <p className="text-sm mt-2 leading-relaxed" style={{ color: '#C9A832', fontWeight: 600 }}>
             One time payment. Lifetime access. Never pay again.

@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
         headers: {
           ...corsHeaders,
           'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': 'attachment; filename="milliontsp-subscribers.csv"',
+          'Content-Disposition': 'attachment; filename="millionfed-subscribers.csv"',
         },
       });
     }

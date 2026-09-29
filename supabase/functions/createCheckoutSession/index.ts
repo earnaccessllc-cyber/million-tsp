@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
         price_data: {
           currency: 'usd',
           product_data: {
-            name: 'MillionTSP Pro — Lifetime Access',
+            name: 'MillionFed Pro — Lifetime Access',
             tax_code: 'txcd_10103000',
           },
           unit_amount: 1999,

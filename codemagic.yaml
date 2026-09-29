@@ -1,6 +1,6 @@
 workflows:
   ios-release:
-    name: MillionTSP iOS Release
+    name: MillionFed iOS Release
     instance_type: mac_mini_m2
     max_build_duration: 60
     integrations:
@@ -11,7 +11,7 @@ workflows:
         bundle_identifier: com.earnaccessllc.milliontsp
       vars:
         APP_ID: 6805869337
-        APP_VERSION: 1.1.1
+        APP_VERSION: 1.2
         XCODE_WORKSPACE: ios/App/App.xcworkspace
         XCODE_SCHEME: App
       node: 22
