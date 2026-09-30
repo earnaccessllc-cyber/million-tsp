@@ -23,7 +23,7 @@ export default function TSPWordmark({ size = 'sm', showIcon = true }) {
             ...gradientStyle,
           }}
         >
-          Million<span style={{ ...gradientStyle, fontWeight: 900, fontFamily: "'Exo 2', sans-serif", fontSize: 17 }}>TSP</span>
+          MillionFed
         </span>
       </div>
     );
@@ -43,7 +43,7 @@ export default function TSPWordmark({ size = 'sm', showIcon = true }) {
             ...gradientStyle,
           }}
         >
-          Million<span style={{ ...gradientStyle }}>TSP</span>
+          MillionFed
         </span>
       </div>
     );

@@ -19,7 +19,7 @@
 // Hashed assets are the opposite case: their URL changes whenever their content
 // does, so a cache hit is always correct and always current. That is where the
 // speed actually comes from, and it costs nothing in freshness.
-const CACHE = 'millionTSP-shell-v2';
+const CACHE = 'millionFed-shell-v3';
 const SHELL_ASSETS = ['/', '/manifest.json', '/tsp-shield-favicon.svg'];
 
 self.addEventListener('install', (event) => {

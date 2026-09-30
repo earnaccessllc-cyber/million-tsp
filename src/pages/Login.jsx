@@ -61,7 +61,7 @@ function Logo() {
         <Shield className="w-8 h-8" style={{ color: '#FFD700' }} />
       </div>
       <h1 className="text-3xl font-orbitron font-bold tracking-widest" style={{ color: '#FFD700', letterSpacing: '0.15em' }}>
-        MILLION<span style={{ color: '#fff' }}>TSP</span>
+        MILLION<span style={{ color: '#fff' }}>FED</span>
       </h1>
       <p className="text-sm font-rajdhani" style={{ color: 'rgba(255,255,255,0.5)', letterSpacing: '0.05em' }}>
         TSP Tracking for Federal Employees
