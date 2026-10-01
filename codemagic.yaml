@@ -38,3 +38,29 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
+
+  android-release:
+    name: MillionFed Android Release
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      android_signing:
+        - millionfed_upload_keystore   # create/upload in Codemagic > Team settings > Code signing identities > Android keystores
+      vars:
+        PACKAGE_NAME: com.earnaccessllc.milliontsp
+      node: 22
+      java: 17
+    scripts:
+      - name: Install packages
+        script: npm ci
+      - name: Build web app
+        script: npm run build
+      - name: Sync Capacitor
+        script: npx cap sync android
+      - name: Build signed AAB
+        script: |
+          cd android
+          chmod +x gradlew
+          ./gradlew bundleRelease
+    artifacts:
+      - android/app/build/outputs/bundle/release/*.aab
