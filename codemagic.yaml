@@ -60,6 +60,9 @@ workflows:
       - name: Build signed AAB
         script: |
           cd android
+          # gradle-wrapper.jar is not committed; regenerate it at the pinned version
+          which gradle || brew install gradle
+          gradle wrapper --gradle-version 8.11.1
           chmod +x gradlew
           ./gradlew bundleRelease
     artifacts:
