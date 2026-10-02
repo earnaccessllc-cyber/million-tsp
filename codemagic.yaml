@@ -41,7 +41,7 @@ workflows:
 
   android-release:
     name: MillionFed Android Release
-    instance_type: linux_x2
+    instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
       android_signing:
