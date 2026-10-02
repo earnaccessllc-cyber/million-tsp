@@ -45,7 +45,7 @@ workflows:
     max_build_duration: 60
     environment:
       android_signing:
-        - millionfed_upload_keystore   # create/upload in Codemagic > Team settings > Code signing identities > Android keystores
+        - MillionFED Distribution
       vars:
         PACKAGE_NAME: com.earnaccessllc.milliontsp
       node: 22
