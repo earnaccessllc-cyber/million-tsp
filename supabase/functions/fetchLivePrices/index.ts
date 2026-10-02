@@ -64,6 +64,19 @@ function parsePercent(str) {
   return isNaN(val) ? null : val;
 }
 
+// The sheet's "Day %" column has been stale/wrong for some funds (L2075 stuck
+// at +6.04%). Derive it from Price and $ Change instead, which are reliable:
+// day% = change / (price - change) * 100. Fall back to the sheet value only
+// when the price data is missing.
+function computeDayPercent(row) {
+  const price = parseFloat(row['Price']);
+  const change = parseFloat(row['$ Change']);
+  if (Number.isFinite(price) && Number.isFinite(change) && price - change > 0) {
+    return Math.round((change / (price - change)) * 100 * 100) / 100;
+  }
+  return parsePercent(row['Day %']);
+}
+
 Deno.serve(async (req) => {
   const preflight = handleOptions(req);
   if (preflight) return preflight;
@@ -85,7 +98,7 @@ Deno.serve(async (req) => {
       funds[key] = {
         share_price: parseFloat(row['Price']) || null,
         daily_change: parseFloat(row['$ Change']) || 0,
-        daily_change_percent: parsePercent(row['Day %']),
+        daily_change_percent: computeDayPercent(row),
         wtd_return_percent: parsePercent(row['Week %']),
         mtd_return_percent: parsePercent(row['Month %']),
         ytd_return_percent: parsePercent(row['Year %']),
