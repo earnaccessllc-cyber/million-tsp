@@ -15,6 +15,15 @@ import Admin from '@/pages/Admin';
 
 // Pages are now imported directly inside AppLayout for multi-stack tab preservation
 
+function shouldShowWelcome() {
+  if (new URLSearchParams(window.location.search).get('from') === 'welcome') return false;
+  try {
+    return !localStorage.getItem('mf_welcome_seen');
+  } catch {
+    return false;
+  }
+}
+
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
   const [showSplash, setShowSplash] = React.useState(() => {
@@ -43,6 +52,14 @@ const AuthenticatedApp = () => {
   }
 
   if (!isAuthenticated && !isLoadingAuth) {
+    // First-time visitors (web and the native apps, which load this same site)
+    // see the /welcome intro page before the login screen. The welcome page sets
+    // the flag, and its links back here carry ?from=welcome so storage being
+    // blocked can never cause a redirect loop.
+    if (shouldShowWelcome()) {
+      window.location.replace('/welcome/');
+      return null;
+    }
     return <Login />;
   }
 
