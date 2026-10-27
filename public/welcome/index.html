@@ -263,6 +263,19 @@ footer p{margin:0 0 12px;max-width:62em}
 <script>
 // Set your real App Store listing here. Every download button uses it.
 var APP_STORE_URL = "https://apps.apple.com/us/app/millionfed-retirement-tracker/id6805869337";
-document.querySelectorAll("[data-store]").forEach(function(a){a.href=APP_STORE_URL;a.target="_blank";a.rel="noopener"});
+// Remember the visit so the app shows its login screen next time.
+try{localStorage.setItem("mf_welcome_seen","1")}catch(e){}
+document.querySelectorAll('a[href="/"]').forEach(function(a){a.href="/?from=welcome"});
+// Inside the iOS/Android app the person already has it installed, so the
+// download buttons become "Get started" and lead to the login screen.
+var inApp=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
+document.querySelectorAll("[data-store]").forEach(function(a){
+  if(inApp){
+    a.href="/?from=welcome";a.removeAttribute("aria-label");
+    var big=a.querySelector("strong"),small=a.querySelector("small");
+    if(small)small.textContent="Already installed";
+    if(big)big.textContent="Get started";
+  }else{a.href=APP_STORE_URL;a.target="_blank";a.rel="noopener"}
+});
 </script>
 </html>
