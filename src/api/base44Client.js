@@ -130,7 +130,9 @@ const auth = {
   },
 
   async resetPasswordRequest(email) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/app/`,
+    });
     if (error) throw error;
     return true;
   },
@@ -145,7 +147,7 @@ const auth = {
       // Network failure revoking server-side — the local session is still
       // cleared below so the user genuinely lands back on the login screen.
     }
-    if (redirect) window.location.href = '/';
+    if (redirect) window.location.href = '/app/';
   },
 };
 

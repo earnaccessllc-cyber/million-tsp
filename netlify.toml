@@ -2,10 +2,51 @@
   command = "npm run build"
   publish = "dist"
 
+# millionfed.com/ shows the welcome page (URL stays "/"); the web app lives
+# under /app. Rules run top to bottom, and the first match wins.
 [[redirects]]
-  from = "/*"
+  from = "/"
+  to = "/welcome/index.html"
+  status = 200
+  force = true
+
+# Old /welcome links (TikTok bios, earnaccessllc.com) land on the root.
+[[redirects]]
+  from = "/welcome"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/welcome/"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/welcome/index.html"
+  to = "/"
+  status = 301
+  force = true
+
+# SPA fallback: every /app/* deep link (and refresh) gets the app shell.
+[[redirects]]
+  from = "/app"
   to = "/index.html"
   status = 200
+
+[[redirects]]
+  from = "/app/*"
+  to = "/index.html"
+  status = 200
+
+# The app used to live at the root. Send old bookmarks and in-flight links
+# (e.g. /settings?upgrade=success from Stripe) to the same page under /app.
+# Real static files (guides, icons, assets) are matched first and unaffected.
+[[redirects]]
+  from = "/*"
+  to = "/app/:splat"
+  status = 301
 
 [build.environment]
   NODE_VERSION = "20"

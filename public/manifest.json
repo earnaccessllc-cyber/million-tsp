@@ -2,7 +2,7 @@
   "name": "MillionFed",
   "short_name": "MillionFed",
   "description": "TSP tracking and retirement planning for federal employees",
-  "start_url": "/",
+  "start_url": "/app/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
