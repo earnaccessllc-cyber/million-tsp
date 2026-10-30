@@ -1,9 +1,9 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>html{background:#09090b}body{margin:0}</style><title>MillionFed: TSP Tracker and Retirement Planner for Federal Employees</title>
 <meta name="description" content="Track all 16 TSP funds with nightly closing prices, your balance and your $1 million goal. FERS pension estimate, risk score and MRA countdown. Free 7-day trial.">
-<link rel="canonical" href="https://millionfed.com/welcome/">
+<link rel="canonical" href="https://millionfed.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="MillionFed">
-<meta property="og:url" content="https://millionfed.com/welcome/">
+<meta property="og:url" content="https://millionfed.com/">
 <meta property="og:title" content="MillionFed: watch your TSP grow to $1 million">
 <meta property="og:description" content="Nightly TSP fund prices, goal tracking, FERS pension estimates and a risk score, in one app for federal employees.">
 <meta property="og:image" content="https://millionfed.com/brand/millionfed-tiktok-1080.png">
@@ -11,7 +11,7 @@
 <meta property="og:image:height" content="1080">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://millionfed.com/brand/millionfed-tiktok-1080.png">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","name":"MillionFed","url":"https://millionfed.com/","logo":"https://millionfed.com/brand/millionfed-logo.png"},{"@type":"WebSite","name":"MillionFed","url":"https://millionfed.com/"},{"@type":"SoftwareApplication","name":"MillionFed","applicationCategory":"FinanceApplication","operatingSystem":"iOS, Android, Web","url":"https://millionfed.com/welcome/","description":"TSP tracker and retirement planner for federal employees: nightly prices for all 16 TSP funds, $1 million goal tracking, FERS pension estimates and a risk score."}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","name":"MillionFed","url":"https://millionfed.com/","logo":"https://millionfed.com/brand/millionfed-logo.png"},{"@type":"WebSite","name":"MillionFed","url":"https://millionfed.com/"},{"@type":"SoftwareApplication","name":"MillionFed","applicationCategory":"FinanceApplication","operatingSystem":"iOS, Android, Web","url":"https://millionfed.com/","description":"TSP tracker and retirement planner for federal employees: nightly prices for all 16 TSP funds, $1 million goal tracking, FERS pension estimates and a risk score."}]}</script>
 <link rel="icon" href="/tsp-shield-favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap">
@@ -131,7 +131,7 @@ footer p{margin:0 0 12px;max-width:62em}
 <div class="wrap">
 <nav>
   <a class="brand" href="#top">Million<b>Fed</b></a>
-  <div class="links"><a class="hide-sm" href="#features">Features</a><a class="hide-sm" href="#how">How it works</a><a href="/">Sign in</a><a href="#download" data-store>Download</a></div>
+  <div class="links"><a class="hide-sm" href="#features">Features</a><a class="hide-sm" href="#how">How it works</a><a href="/app/">Log in</a><a href="#download" data-store>Download</a></div>
 </nav>
 
 <header class="hero" id="top">
@@ -267,17 +267,29 @@ footer p{margin:0 0 12px;max-width:62em}
 <div class="sticky"><a class="store gold" data-store href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5M5 20h14"/></svg><span><strong>Download on the App Store</strong></span></a></div>
 
 <script>
+// This page is served at millionfed.com/, which is also what the native apps
+// (capacitor.config.json server.url) and installed home-screen web apps open.
+// Those users want the app, so send them to /app — unless the app itself sent
+// them here (?from=app) to see this intro the first time. Supabase auth links
+// from older emails (#access_token=… or ?code=…) are forwarded to the app too.
+(function(){
+  var q=location.search,h=location.hash;
+  var native=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
+  var standalone=window.navigator.standalone===true||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches);
+  var auth=/[#&]access_token=|[#&]error_description=/.test(h)||/[?&]code=/.test(q);
+  if(auth||((native||standalone)&&!/[?&]from=app/.test(q))){location.replace("/app/"+q+h)}
+})();
 // Set your real App Store listing here. Every download button uses it.
 var APP_STORE_URL = "https://apps.apple.com/us/app/millionfed-retirement-tracker/id6805869337";
 // Remember the visit so the app shows its login screen next time.
 try{localStorage.setItem("mf_welcome_seen","1")}catch(e){}
-document.querySelectorAll('a[href="/"]').forEach(function(a){a.href="/?from=welcome"});
+document.querySelectorAll('a[href="/app/"]').forEach(function(a){a.href="/app/?from=welcome"});
 // Inside the iOS/Android app the person already has it installed, so the
 // download buttons become "Get started" and lead to the login screen.
 var inApp=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
 document.querySelectorAll("[data-store]").forEach(function(a){
   if(inApp){
-    a.href="/?from=welcome";a.removeAttribute("aria-label");
+    a.href="/app/?from=welcome";a.removeAttribute("aria-label");
     var big=a.querySelector("strong"),small=a.querySelector("small");
     if(small)small.textContent="Already installed";
     if(big)big.textContent="Get started";

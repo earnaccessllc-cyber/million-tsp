@@ -53,11 +53,12 @@ const AuthenticatedApp = () => {
 
   if (!isAuthenticated && !isLoadingAuth) {
     // First-time visitors (web and the native apps, which load this same site)
-    // see the /welcome intro page before the login screen. The welcome page sets
-    // the flag, and its links back here carry ?from=welcome so storage being
-    // blocked can never cause a redirect loop.
+    // see the welcome intro page at / before the login screen. The welcome page
+    // sets the flag, and its links back here carry ?from=welcome so storage being
+    // blocked can never cause a redirect loop. ?from=app tells the welcome page
+    // not to bounce native/installed users straight back into /app.
     if (shouldShowWelcome()) {
-      window.location.replace('/welcome/');
+      window.location.replace('/?from=app');
       return null;
     }
     return <Login />;
@@ -87,7 +88,7 @@ function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <ThemeProvider>
-          <Router>
+          <Router basename="/app">
             <AuthenticatedApp />
           </Router>
           <Toaster />

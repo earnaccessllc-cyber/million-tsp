@@ -51,14 +51,14 @@ export const AuthProvider = ({ children }) => {
     await base44.auth.logout(false);
     setUser(null);
     setIsAuthenticated(false);
-    window.location.href = '/';
+    window.location.href = '/app/';
   };
 
   const navigateToLogin = async () => {
     await base44.auth.logout(false);
     setUser(null);
     setIsAuthenticated(false);
-    window.location.href = '/';
+    window.location.href = '/app/';
   };
 
   return (

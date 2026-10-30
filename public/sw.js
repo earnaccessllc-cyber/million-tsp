@@ -19,8 +19,9 @@
 // Hashed assets are the opposite case: their URL changes whenever their content
 // does, so a cache hit is always correct and always current. That is where the
 // speed actually comes from, and it costs nothing in freshness.
-const CACHE = 'millionFed-shell-v3';
-const SHELL_ASSETS = ['/', '/manifest.json', '/tsp-shield-favicon.svg'];
+const CACHE = 'millionFed-shell-v4';
+// The app shell is /app/ (the root is now the static welcome page).
+const SHELL_ASSETS = ['/app/', '/manifest.json', '/tsp-shield-favicon.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL_ASSETS)));
@@ -64,7 +65,7 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         })
-        .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/')))
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match(url.pathname.startsWith('/app') ? '/app/' : '/')))
     );
     return;
   }
