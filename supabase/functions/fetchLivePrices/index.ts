@@ -77,6 +77,21 @@ function computeDayPercent(row) {
   return parsePercent(row['Day %']);
 }
 
+// Even Price/$ Change can be wrong for a fund (L2075 still showed ~+6% when
+// every other fund moved well under 1%). TSP funds all track the same
+// underlying markets, so a daily move far from the median of all funds is a
+// data error, not a real move. Return null so it isn't shown as a "mover".
+const MAX_DEVIATION_FROM_MEDIAN = 3; // percentage points
+function dropOutliers(values) {
+  const nums = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  if (nums.length < 3) return values;
+  const mid = Math.floor(nums.length / 2);
+  const median = nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+  return values.map((v) =>
+    Number.isFinite(v) && Math.abs(v - median) > MAX_DEVIATION_FROM_MEDIAN ? null : v
+  );
+}
+
 Deno.serve(async (req) => {
   const preflight = handleOptions(req);
   if (preflight) return preflight;
@@ -105,6 +120,10 @@ Deno.serve(async (req) => {
         last_updated: row['Last Updated'] || '',
       };
     }
+
+    const fundList = Object.values(funds);
+    const cleaned = dropOutliers(fundList.map(f => f.daily_change_percent));
+    fundList.forEach((f, i) => { f.daily_change_percent = cleaned[i]; });
 
     if (Object.keys(funds).length === 0) {
       return jsonResponse({ error: 'No fund data parsed' }, 422);
