@@ -136,6 +136,18 @@ function addBusinessDays(dateStr, n) {
   return cur.toISOString().split('T')[0];
 }
 
+// Market days after `from` up to and including `to` (both YYYY-MM-DD).
+function marketDaysBetween(from, to) {
+  const cur = new Date(`${String(from).slice(0, 10)}T00:00:00Z`);
+  const end = new Date(`${String(to).slice(0, 10)}T00:00:00Z`);
+  let n = 0;
+  while (cur < end) {
+    cur.setUTCDate(cur.getUTCDate() + 1);
+    if (isMarketDay(cur.toISOString().split('T')[0])) n++;
+  }
+  return n;
+}
+
 function resolveContribPctAndDollar(mode, pct, dollar, salary, periods) {
   if (mode === 'percent') {
     const p = pct || 0;
@@ -382,6 +394,34 @@ Deno.serve(async (req) => {
         date: today,
         sheetDate,
       });
+    }
+
+    // Stale-price check: a fund whose sheet price hasn't changed for several
+    // market days is almost certainly a broken sheet row, not a real flat
+    // price (the G Fund alone rises every market day). Flag it in the
+    // response and the function log so it gets noticed. This never blocks
+    // the update; it only warns.
+    const STALE_AFTER_MARKET_DAYS = 3;
+    const stalePrices = [];
+    try {
+      const { data: seen } = await adminClient.from('fund_price_staleness').select('*');
+      const seenBy = Object.fromEntries((seen || []).map((r) => [r.fund_name, r]));
+      const upserts = [];
+      for (const [fundName, d] of Object.entries(fundData)) {
+        const prev = seenBy[fundName];
+        if (!prev || Number(prev.price) !== Number(d.share_price)) {
+          upserts.push({ fund_name: fundName, price: d.share_price, unchanged_since: today, updated_at: new Date().toISOString() });
+          continue;
+        }
+        const days = marketDaysBetween(prev.unchanged_since, today);
+        if (days >= STALE_AFTER_MARKET_DAYS) {
+          stalePrices.push({ fund: fundName, price: d.share_price, unchangedSince: prev.unchanged_since, marketDays: days });
+        }
+      }
+      if (upserts.length > 0) await adminClient.from('fund_price_staleness').upsert(upserts, { onConflict: 'fund_name' });
+      if (stalePrices.length > 0) console.error('STALE TSP PRICES on live sheet:', JSON.stringify(stalePrices));
+    } catch (e) {
+      console.error('Stale-price check failed:', e.message);
     }
 
     const { data: allProfiles } = await adminClient.from('tsp_profiles').select('*');
@@ -739,6 +779,7 @@ Deno.serve(async (req) => {
       success: true,
       date: today,
       profilesUpdated: results.filter(r => r.success).length,
+      stalePrices,
       results,
     });
   } catch (error) {
