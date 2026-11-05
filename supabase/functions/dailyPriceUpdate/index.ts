@@ -431,6 +431,19 @@ Deno.serve(async (req) => {
           return !d || Number(f.share_price) === Number(d.share_price);
         });
 
+        // The sheet's "Last Updated" stamp is when the SHEET refreshed, not
+        // when its prices did — so early in the evening it can claim today
+        // while still carrying the previous market day's prices. Recording
+        // those as today wrote a flat $0 day and marked it final (seen
+        // 2026-11-04). If nothing has been priced today yet and every price
+        // still equals what an earlier day stored, the new close isn't out
+        // yet: wait for a later poll instead of recording a stale day.
+        const pricesFromEarlierDay = selectedFunds.every(f => !f.last_price_update || f.last_price_update < today);
+        if (!alreadyProcessedToday && pricesAlreadyStored && pricesFromEarlierDay) {
+          results.push({ profile_id: profile.id, skipped: true, reason: `Sheet prices unchanged since ${selectedFunds[0]?.last_price_update || 'last update'} — today's close not published yet` });
+          continue;
+        }
+
         // Payroll takes the money on the pay date; TSP posts it to the account
         // a few business days later, and buys units at the price on the day it
         // posts. This job used to credit it on the pay date, which got both
