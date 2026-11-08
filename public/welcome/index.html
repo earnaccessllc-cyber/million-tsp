@@ -1,4 +1,18 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>html{background:#09090b}body{margin:0}</style><title>MillionFed: TSP Tracker and Retirement Planner for Federal Employees</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>html{background:#09090b}body{margin:0}</style><script>
+// Runs first, before anything paints: the native apps and home-screen web apps
+// open millionfed.com/, and redirecting from the bottom of the page let the
+// intro flash on screen for a moment on every launch. Signed-in visitors
+// (a saved Supabase session) go straight to the app too.
+(function(){
+  var q=location.search,h=location.hash;
+  var native=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
+  var standalone=window.navigator.standalone===true||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches);
+  var auth=/[#&]access_token=|[#&]error_description=/.test(h)||/[?&]code=/.test(q);
+  var signedIn=false;
+  try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(/^sb-.*-auth-token$/.test(k)){signedIn=true;break}}}catch(e){}
+  if(auth||((native||standalone||signedIn)&&!/[?&]from=app/.test(q))){document.documentElement.style.visibility="hidden";location.replace("/app/"+q+h)}
+})();
+</script><title>MillionFed: TSP Tracker and Retirement Planner for Federal Employees</title>
 <meta name="description" content="Track all 16 TSP funds with nightly closing prices, your balance and your $1 million goal. FERS pension estimate, risk score and MRA countdown. Free 7-day trial.">
 <link rel="canonical" href="https://millionfed.com/">
 <meta property="og:type" content="website">
@@ -272,13 +286,6 @@ footer p{margin:0 0 12px;max-width:62em}
 // Those users want the app, so send them to /app — unless the app itself sent
 // them here (?from=app) to see this intro the first time. Supabase auth links
 // from older emails (#access_token=… or ?code=…) are forwarded to the app too.
-(function(){
-  var q=location.search,h=location.hash;
-  var native=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
-  var standalone=window.navigator.standalone===true||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches);
-  var auth=/[#&]access_token=|[#&]error_description=/.test(h)||/[?&]code=/.test(q);
-  if(auth||((native||standalone)&&!/[?&]from=app/.test(q))){location.replace("/app/"+q+h)}
-})();
 // Set your real App Store listing here. Every download button uses it.
 var APP_STORE_URL = "https://apps.apple.com/us/app/millionfed-retirement-tracker/id6805869337";
 // Remember the visit so the app shows its login screen next time.

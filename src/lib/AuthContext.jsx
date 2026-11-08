@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback, useRef } from 'react';
 import { supabase, base44 } from '@/api/base44Client';
 
 const AuthContext = createContext();
@@ -10,20 +10,40 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
 
+  // Supabase fires several auth events on every launch and login
+  // (INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED) on top of the explicit
+  // check from the login screen. Each used to flip isLoadingAuth back on,
+  // which unmounted the whole app (profile included) and remounted it —
+  // the flash of an empty, new-user looking account right after login.
+  // Only the very first check shows the loading screen; re-checks for the
+  // same user leave the app mounted, and concurrent checks share one call.
+  const userIdRef = useRef(null);
+  const inFlightRef = useRef(null);
+
   const checkUserAuth = useCallback(async () => {
+    if (inFlightRef.current) return inFlightRef.current;
+    const run = (async () => {
     try {
-      setIsLoadingAuth(true);
+      if (!userIdRef.current) setIsLoadingAuth(true);
       setAuthError(null);
       const currentUser = await base44.auth.me();
-      setUser(currentUser);
+      if (userIdRef.current !== currentUser.id) {
+        userIdRef.current = currentUser.id;
+        setUser(currentUser);
+      }
       setIsAuthenticated(true);
     } catch (error) {
+      userIdRef.current = null;
       setUser(null);
       setIsAuthenticated(false);
     } finally {
       setIsLoadingAuth(false);
       setAuthChecked(true);
+      inFlightRef.current = null;
     }
+    })();
+    inFlightRef.current = run;
+    return run;
   }, []);
 
   useEffect(() => {
@@ -35,6 +55,7 @@ export const AuthProvider = ({ children }) => {
       if (session?.user) {
         checkUserAuth();
       } else {
+        userIdRef.current = null;
         setUser(null);
         setIsAuthenticated(false);
         setAuthChecked(true);
