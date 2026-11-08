@@ -46,9 +46,18 @@ export function ProfileProvider({ children }) {
   // Base44 entity SDK automatically filters by created_by_id (the logged-in user).
   // We include currentUserId in the query key so React Query never serves a
   // cached result from a different user's session.
+  // An empty result right after sign-in can just mean the request went out
+  // before the new session was attached (row-level security then returns no
+  // rows). Treating that as "no profile" sent existing users to the new-user
+  // setup screen with a $0 balance for a moment. Re-ask once before believing it.
   const { data: rawProfiles = [], isLoading: queryLoading } = useQuery({
     queryKey: ['tsp-profiles', currentUserId],
-    queryFn: () => base44.entities.TSPProfile.list('-updated_date'),
+    queryFn: async () => {
+      const first = await base44.entities.TSPProfile.list('-updated_date');
+      if (first.length > 0) return first;
+      await new Promise((r) => setTimeout(r, 600));
+      return base44.entities.TSPProfile.list('-updated_date');
+    },
     enabled: !!currentUserId,
     staleTime: 0,
   });
