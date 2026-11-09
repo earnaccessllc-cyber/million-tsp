@@ -1,5 +1,7 @@
 [build]
-  command = "npm run build"
+  # indexnow.mjs only pings on Netlify production builds; Codemagic and local
+  # builds use `npm run build` directly and never reach it.
+  command = "npm run build && node scripts/indexnow.mjs"
   publish = "dist"
 
 # millionfed.com/ shows the welcome page (URL stays "/"); the web app lives
