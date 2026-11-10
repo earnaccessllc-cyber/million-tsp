@@ -1,0 +1,44 @@
+name: Validate MillionFed deployment
+
+on:
+  pull_request:
+    branches:
+      - migrate/netlify-supabase
+  push:
+    branches:
+      - migrate/netlify-supabase
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: millionfed-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Production build check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Build production site
+        run: npm run build
+      - name: Verify generated SEO pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          for page in dist/welcome/index.html dist/guides/index.html dist/guides/tsp-funds-explained/index.html dist/guides/fers-pension-calculator/index.html dist/guides/g-fund-vs-c-fund/index.html; do
+            test -s "$page" || { echo "::error::Missing $page"; exit 1; }
+            grep -qi '<title>' "$page" || { echo "::error::Missing title in $page"; exit 1; }
+            grep -qi 'rel="canonical"' "$page" || { echo "::error::Missing canonical in $page"; exit 1; }
+          done
