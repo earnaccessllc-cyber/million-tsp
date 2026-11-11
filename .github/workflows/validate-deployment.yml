@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for page in dist/welcome/index.html dist/guides/index.html dist/guides/tsp-funds-explained/index.html dist/guides/fers-pension-calculator/index.html dist/guides/g-fund-vs-c-fund/index.html; do
+          for page in dist/welcome/index.html dist/guides/index.html dist/guides/tsp-funds-explained/index.html dist/guides/fers-pension-calculator/index.html dist/guides/g-fund-vs-c-fund/index.html dist/guides/fers-retirement-eligibility/index.html dist/guides/fers-supplement-earnings-test/index.html; do
             test -s "$page" || { echo "::error::Missing $page"; exit 1; }
             grep -qi '<title>' "$page" || { echo "::error::Missing title in $page"; exit 1; }
             grep -qi 'rel="canonical"' "$page" || { echo "::error::Missing canonical in $page"; exit 1; }
