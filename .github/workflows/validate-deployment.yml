@@ -37,8 +37,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for page in dist/welcome/index.html dist/guides/index.html dist/guides/tsp-funds-explained/index.html dist/guides/fers-pension-calculator/index.html dist/guides/g-fund-vs-c-fund/index.html dist/guides/fers-retirement-eligibility/index.html dist/guides/fers-supplement-earnings-test/index.html dist/guides/fers-postponed-vs-deferred/index.html dist/guides/fers-unused-sick-leave/index.html dist/guides/fers-cola-2027/index.html dist/guides/tsp-rule-of-55/index.html dist/guides/fers-survivor-benefit-options/index.html dist/guides/tsp-traditional-vs-roth-withdrawals/index.html dist/guides/fers-high-3-salary-usps/index.html dist/guides/fers-supplement-calculation/index.html dist/guides/tsp-divorce-court-orders/index.html dist/guides/tsp-beneficiary-designations/index.html; do
+          for page in dist/welcome/index.html dist/guides/index.html dist/guides/tsp-funds-explained/index.html dist/guides/fers-pension-calculator/index.html dist/guides/g-fund-vs-c-fund/index.html dist/guides/fers-retirement-eligibility/index.html dist/guides/fers-supplement-earnings-test/index.html dist/guides/fers-postponed-vs-deferred/index.html dist/guides/fers-unused-sick-leave/index.html dist/guides/fers-cola-2027/index.html dist/guides/tsp-rule-of-55/index.html dist/guides/fers-survivor-benefit-options/index.html dist/guides/tsp-traditional-vs-roth-withdrawals/index.html dist/guides/fers-high-3-salary-usps/index.html dist/guides/fers-supplement-calculation/index.html dist/guides/tsp-divorce-court-orders/index.html dist/guides/tsp-beneficiary-designations/index.html dist/guides/fers-retirement-application-checklist/index.html; do
             test -s "$page" || { echo "::error::Missing $page"; exit 1; }
             grep -qi '<title>' "$page" || { echo "::error::Missing title in $page"; exit 1; }
             grep -qi 'rel="canonical"' "$page" || { echo "::error::Missing canonical in $page"; exit 1; }
           done
+          test "$(grep -c 'https://millionfed.com/guides/fers-retirement-application-checklist/' dist/sitemap.xml)" -ge 1 || { echo "::error::New article absent from sitemap"; exit 1; }
+          grep -q '/guides/fers-retirement-application-checklist/' dist/guides/index.html || { echo "::error::Guide directory missing article link"; exit 1; }
+          grep -q 'https://www.opm.gov/retirement-center/apply/quick-guide/' dist/guides/fers-retirement-application-checklist/index.html || { echo "::error::Official OPM citation missing"; exit 1; }
